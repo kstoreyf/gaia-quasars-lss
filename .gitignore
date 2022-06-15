@@ -1,9 +1,13 @@
 # my dirs
 data/
+plots/
 
 # jupyter
 #**/*.ipynb_checkpoints/
 .ipynb_checkpoints
+
+# other
+.DS_store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
