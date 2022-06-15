@@ -14,8 +14,11 @@ import astropy.cosmology
 
 
 def main():
-    fn_data = '../data/gaia_photoz.fits'
-    fn_save = '../plots/animations/quasars_lil.gif'
+    #fn_data = '../data/gaia_photoz.fits'
+    fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
+    format_save = 'gif'
+    N_sub_str = '1e3'
+    fn_save = f'../plots/animations/quasars_N{N_sub_str}.{format_save}'
 
     print("Reading data:", fn_data)
     data = Table.read(fn_data, format='fits')
@@ -25,7 +28,7 @@ def main():
     print("Loaded data with N =", len(data))
 
     # Subsample, if desired
-    N_sub = 1000
+    N_sub = int(N_sub_str)
     data = subsample(data, N_sub)
     print("Subsampled data to N =", len(data))
 
@@ -64,8 +67,14 @@ def main():
                                 frames=360, interval=20, blit=True)
 
     print("Saving animation to", fn_save)
-    anim.save(fn_save, writer=PillowWriter(fps=16))
-
+     s = time.time()
+    if format_save=='gif':
+        anim.save(fn_save, writer=PillowWriter(fps=32))
+    elif format_save=='mp4':
+        anim.save(fn_save, fps=30, extra_args=['-vcodec', 'libx264'])
+    e = time.time()
+    print("Save time:", e-s)
+    
     print("Saved!")
 
 
