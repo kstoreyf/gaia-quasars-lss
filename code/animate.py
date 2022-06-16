@@ -119,7 +119,8 @@ def add_M_absolute(data, cosmo, redshift_name):
 
 
 def subsample(data, N_sub):
-    idx_sub = np.random.randint(low=0, high=len(data), size=N_sub)
+    N = len(data)
+    idx_sub = np.random.choice(np.arange(N), size=N_sub, replace=False)
     return data[idx_sub]
 
 
