@@ -9,6 +9,8 @@ from astropy.table import Table, join
 from dustmaps.sfd import SFDQuery
 from sklearn.neighbors import KDTree
 
+import utils
+
 
 def main():
 
@@ -19,14 +21,14 @@ def main():
     # Load data
     print("Loading data")
     fn_gaia = '../data/gaia_wise_panstarrs_tmass.fits.gz'
-    tab_gaia = load_fits_data(fn_gaia)
+    tab_gaia = utils.load_table(fn_gaia)
     # TEST ONLY W SMALL AMOUNT
     #tab_gaia = tab_gaia[np.random.randint(0, len(tab_gaia), size=10000)]
     N_gaia = len(tab_gaia)
     print(f"Number of Gaia QSO candidates: {N_gaia}")
 
     fn_sdss = '../data/SDSS_DR16Q_v4.fits'
-    tab_sdss = load_fits_data(fn_sdss)
+    tab_sdss = utils.load_table(fn_sdss)
 
     z_min = 0.01
     redshift_key = 'Z'
@@ -94,9 +96,9 @@ def main():
     redshift_sdss_withspzs[index_list_gaiaINsdss] = Y_train
     redshift_sdss[idx_withspzs] = redshift_sdss_withspzs
 
-    tab_spz_knn = Table([tab_gaia['source_id'], redshift_spz, redshift_sdss],
-                          names=('source_id', 'redshift_spz', 'redshift_sdss'))
-    tab_spz_knn.write(fn_spz, overwrite=overwrite)
+    data_cols = [tab_gaia['source_id'], redshift_spz, redshift_sdss]
+    col_names = ('source_id', 'redshift_spz', 'redshift_sdss')
+    utils.write_table(fn_spz, data_cols, col_names, overwrite=overwrite)
     print(f"Wrote specphotozs to {fn_spz}!")
 
 
@@ -118,8 +120,6 @@ def cuts_index(tab, gmag_max, color_cuts):
     return idx_clean
 
 
-def load_fits_data(fn_fits):
-    return Table.read(fn_fits, format='fits')
 
 
 def redshift_cut_index(tab, z_min, redshift_key):
@@ -160,14 +160,6 @@ def add_gaia_wise_colors(tab):
 
 def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
     return cut[0] * g_w1 + cut[1] * w1_w2 > cut[2]
-
-
-## Dust map
-def add_ebv(tab):
-    sfd = SFDQuery()
-    coords = SkyCoord(ra=tab['ra'], dec=tab['dec'], frame='icrs') 
-    ebv = sfd(coords)
-    tab.add_column(ebv, name='ebv')
 
 
 def construct_X(tab, feature_keys):
