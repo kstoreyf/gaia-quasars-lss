@@ -4,6 +4,7 @@ import pandas as pd
 import healpy as hp
 from astropy.coordinates import SkyCoord
 from astropy import units as u
+from astropy.units import Quantity
 from astropy.table import Table
 from dustmaps.sfd import SFDQuery
 
@@ -12,8 +13,21 @@ def get_fraction_recovered(Y_true, Y_hat, z_err_close):
         return np.sum(np.abs(Y_true - Y_hat) < z_err_close) / len(Y_true)
 
 
-def add_spzs(tab_gaia):
-    fn_spz = '../data/redshifts_spz_kNN.fits'
+def add_gaia_wise_colors(tab):
+    g = tab['phot_g_mean_mag']
+    bp = tab['phot_bp_mean_mag']
+    rp = tab['phot_rp_mean_mag']
+    w1 = tab['w1mpro']
+    w2 = tab['w2mpro']
+
+    tab.add_column(g-rp, name='g_rp')
+    tab.add_column(bp-g, name='bp_g')
+    tab.add_column(bp-rp, name='bp_rp')
+    tab.add_column(g-w1, name='g_w1')
+    tab.add_column(w1-w2, name='w1_w2')
+
+
+def add_spzs(tab_gaia, fn_spz='../data/redshifts_spz_kNN.fits'):
     tab_spz = Table.read(fn_spz, format='fits')
     assert np.allclose(tab_gaia['source_id'], tab_spz['source_id']), "Source IDs don't line up! They should by construction"
     tab_gaia.add_column(tab_spz['redshift_spz'], name='redshift_spz')
@@ -53,7 +67,7 @@ def add_ebv(tab):
 
 def get_ebv(ra, dec):
     sfd = SFDQuery()
-    coords = SkyCoord(ra=ra*u.deg, dec=dec*u.deg, frame='icrs') 
+    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
     ebv = sfd(coords)
     return ebv
 

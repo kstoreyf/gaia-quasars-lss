@@ -38,10 +38,10 @@ def main():
 
     print("Constructing feature matrix")
     # Get reddening
-    add_ebv(tab_gaia)
+    utils.add_ebv(tab_gaia)
 
     # color cuts
-    add_gaia_wise_colors(tab_gaia)
+    utils.add_gaia_wise_colors(tab_gaia)
     gmag_max = 20
     color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
     idx_clean_gaia = cuts_index(tab_gaia, gmag_max, color_cuts) 
@@ -142,20 +142,6 @@ def cross_match(tab1, ra1, dec1,
     #return idx_1in2, idx_2in1
     # for now just return index lists, less scary
     return index_list_1in2, index_list_2in1
-
-
-def add_gaia_wise_colors(tab):
-    g = tab['phot_g_mean_mag']
-    bp = tab['phot_bp_mean_mag']
-    rp = tab['phot_rp_mean_mag']
-    w1 = tab['w1mpro']
-    w2 = tab['w2mpro']
-
-    tab.add_column(g-rp, name='g_rp')
-    tab.add_column(bp-g, name='bp_g')
-    tab.add_column(bp-rp, name='bp_rp')
-    tab.add_column(g-w1, name='g_w1')
-    tab.add_column(w1-w2, name='w1_w2')
 
 
 def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
