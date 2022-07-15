@@ -6,22 +6,27 @@ from numpy.random import default_rng
 import astropy
 import healpy as hp
 from astropy.table import Table
+from astropy import units as u
 from scipy.optimize import curve_fit
 
 import utils
+import masks
 
 
 def main():
 
     # save name
     fac_rand = 10
-    dust = False
+    dust = True
     completeness = True
+    mask_plane = True
     tag_rand = ''
     if dust:
         tag_rand += '_dust'
     if completeness:
         tag_rand += '_completeness'
+    if mask_plane:
+        tag_rand += '_maskplane'
     fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
     overwrite = True
 
@@ -31,16 +36,10 @@ def main():
 
     # Load and set up data
     print("Loading data")
-    fn_gaia = '../data/gaia_wise_panstarrs_tmass.fits.gz'
+    fn_gaia = '../data/gaia_spz_kNN.fits'
     tab_gaia = utils.load_table(fn_gaia)
-
-    # Get only our clean sample (TODO: save this more nicely)
-    utils.add_spzs(tab_gaia)
-    idx_withspz = np.isfinite(tab_gaia['redshift_spz'])
-    tab_gaia_withspz = tab_gaia[idx_withspz]
-    N_data = len(tab_gaia_withspz)
-    ra_data, dec_data = tab_gaia_withspz['ra'], tab_gaia_withspz['dec']
-    gmag_data = tab_gaia_withspz['phot_g_mean_mag']
+    N_data = len(tab_gaia)
+    ra_data, dec_data, gmag_data = tab_gaia['ra'], tab_gaia['dec'], tab_gaia['phot_g_mean_mag']
     print(f"Number of data sources: {N_data}")
 
     # first get estimate of reduction factor (TODO: better way to do this?)
@@ -54,6 +53,7 @@ def main():
     print(f"Generating random with {fac_rand} times N_data")
     ra_rand, dec_rand = generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data,
                                                dust=dust, completeness=completeness,
+                                               mask_plane=mask_plane,
                                                gmag_data=gmag_data)
     print(f"Number of final random sources: {len(ra_rand)}")
 
@@ -65,15 +65,34 @@ def main():
 
 
 def generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data, 
-                           dust=False, completeness=False, gmag_data=None):
+                           dust=False, completeness=False, 
+                           mask_plane=False, gmag_data=None):
     ra_rand, dec_rand = random_ra_dec_on_sphere(rng, N_rand_init)
+    # should i be masking the data too, before using it to compute Av function?
+    if mask_plane:
+        b_max = 10
+        print(f"Masking galactic plane to b={b_max}")
+        ra_rand, dec_rand = subsample_by_mask(NSIDE, ra_rand, dec_rand, masks.galactic_plane_mask, [b_max])
     if dust:
         ra_rand, dec_rand = subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data)
+    # should this be sequential, or is there a better way?
     if completeness:
         if gmag_data is None:
             raise ValueError("If getting completess, need to pass a G distribution 'gmag_data'!")
         subsample_by_completeness(NSIDE, rng, ra_rand, dec_rand, gmag_data)
     return ra_rand, dec_rand
+
+
+def subsample_by_mask(NSIDE, ra_rand, dec_rand, mask_func, mask_func_args):
+    mask = mask_func(NSIDE, *mask_func_args)
+    _, pixel_indices = utils.get_map(NSIDE, ra_rand, dec_rand)
+        
+    # TODO: better way to do this??
+    pixel_arr = np.arange(len(mask))
+    pixel_indices_keep = pixel_arr[mask]
+    idx_keep = np.in1d(pixel_indices, pixel_indices_keep, invert=True)
+    print(f"Masked {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
+    return ra_rand[idx_keep], dec_rand[idx_keep]
 
 
 def indices_for_downsample(rng, probability_accept):
@@ -87,8 +106,8 @@ def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
     # TODO: this needs to be R_G to get A_G, now it's R_v!
     # generate random just to compute the mean Av in each pixel;
     # think that generally this should be a different random than the one we're making
-    ra_avrand, dec_avrand = random_ra_dec_on_sphere(10*len(ra_data))
-    av_avrand = utils.get_extinction(ra_avrand, dec_avrand, R=R)
+    ra_avrand, dec_avrand = random_ra_dec_on_sphere(rng, 10*len(ra_data))
+    av_avrand = utils.get_extinction(ra_avrand*u.deg, dec_avrand*u.deg, R=R)
     map_avmean_avrand, _ = utils.get_map(NSIDE, ra_avrand, dec_avrand, quantity=av_avrand, 
                                          func_name='mean', null_val=np.nan)
    
@@ -98,7 +117,7 @@ def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
     # should i be getting these probabilities from exact spot on map,
     # or averaged for some reason?
     # now use the actual random points and use the function to get downsampling val
-    av_rand = utils.get_extinction(ra_rand, dec_rand, R=R)
+    av_rand = utils.get_extinction(ra_rand*u.deg, dec_rand*u.deg, R=R)
     p_accept = p_Av(av_rand)
     idx_keep = indices_for_downsample(rng, p_accept)
     print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for dust")
