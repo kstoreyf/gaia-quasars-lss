@@ -1,5 +1,5 @@
 import pandas as pd
-mapFile = 'allsky_m10_hpx7.h5'
+mapFile = '../data/completeness_allsky_m10_hpx7.h5'
 dfm10 = pd.read_hdf(mapFile, "data")
 print('File %s loaded.' % (mapFile))
 

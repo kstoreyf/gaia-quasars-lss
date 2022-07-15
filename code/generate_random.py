@@ -1,4 +1,7 @@
+from getopt import gnu_getopt
 import numpy as np
+import pandas as pd
+from numpy.random import default_rng
 
 import astropy
 import healpy as hp
@@ -12,12 +15,19 @@ def main():
 
     # save name
     fac_rand = 10
-    dust = True
-    fn_rand = f'../data/randoms/random_dust_{fac_rand}x.fits'
+    dust = False
+    completeness = True
+    tag_rand = ''
+    if dust:
+        tag_rand += '_dust'
+    if completeness:
+        tag_rand += '_completeness'
+    fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
     overwrite = True
 
-    # about right to get 15 qso per pixel
+    # for getting mean Av_rand; about right to get ~15 qso per pixel
     NSIDE = 64
+    rng = default_rng(seed=42)
 
     # Load and set up data
     print("Loading data")
@@ -30,19 +40,22 @@ def main():
     tab_gaia_withspz = tab_gaia[idx_withspz]
     N_data = len(tab_gaia_withspz)
     ra_data, dec_data = tab_gaia_withspz['ra'], tab_gaia_withspz['dec']
+    gmag_data = tab_gaia_withspz['phot_g_mean_mag']
     print(f"Number of data sources: {N_data}")
 
     # first get estimate of reduction factor (TODO: better way to do this?)
     print("Estimating reduction factor")
     N_rand_try = 10000
-    ra_rand, _ = generate_and_subsample(NSIDE, N_rand_try, ra_data, dec_data, dust=dust)
+    ra_rand, _ = generate_and_subsample(NSIDE, rng, N_rand_try, ra_data, dec_data, dust=dust)
     reduction_factor_estimate = len(ra_rand)/N_rand_try
 
     # Generate actual random, dividing by reduction factor
     N_rand_init = int((fac_rand*N_data)/reduction_factor_estimate)
     print(f"Generating random with {fac_rand} times N_data")
-    ra_rand, dec_rand = generate_and_subsample(NSIDE, N_rand_init, ra_data, dec_data,
-                                               dust=dust)
+    ra_rand, dec_rand = generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data,
+                                               dust=dust, completeness=completeness,
+                                               gmag_data=gmag_data)
+    print(f"Number of final random sources: {len(ra_rand)}")
 
     # Save! 
     result = [ra_rand, dec_rand]
@@ -51,18 +64,27 @@ def main():
     print(f"Wrote random to {fn_rand}!")
 
 
-def generate_and_subsample(NSIDE, N_rand_init, ra_data, dec_data, dust=False):
-    ra_rand, dec_rand = random_ra_dec_on_sphere(N_rand_init)
+def generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data, 
+                           dust=False, completeness=False, gmag_data=None):
+    ra_rand, dec_rand = random_ra_dec_on_sphere(rng, N_rand_init)
     if dust:
-        ra_rand, dec_rand = subsample_by_dust(NSIDE, ra_rand, dec_rand, ra_data, dec_data)
+        ra_rand, dec_rand = subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data)
+    if completeness:
+        if gmag_data is None:
+            raise ValueError("If getting completess, need to pass a G distribution 'gmag_data'!")
+        subsample_by_completeness(NSIDE, rng, ra_rand, dec_rand, gmag_data)
     return ra_rand, dec_rand
 
 
+def indices_for_downsample(rng, probability_accept):
+    # if probability is greater than random, keep
+    random_vals_rand = rng.random(size=len(probability_accept))
+    idx_keep = (probability_accept >= random_vals_rand)
+    return idx_keep
 
-def subsample_by_dust(NSIDE, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
 
-    # TODO: this needs to be A_G i think, not A_v, but need to figure out that value!
-
+def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
+    # TODO: this needs to be R_G to get A_G, now it's R_v!
     # generate random just to compute the mean Av in each pixel;
     # think that generally this should be a different random than the one we're making
     ra_avrand, dec_avrand = random_ra_dec_on_sphere(10*len(ra_data))
@@ -78,15 +100,23 @@ def subsample_by_dust(NSIDE, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
     # now use the actual random points and use the function to get downsampling val
     av_rand = utils.get_extinction(ra_rand, dec_rand, R=R)
     p_accept = p_Av(av_rand)
-    # if probability is greater than random, keep
-    random_vals_rand = np.random.rand(len(ra_rand))
-    idx_keep = p_accept >= random_vals_rand
+    idx_keep = indices_for_downsample(rng, p_accept)
+    print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for dust")
     return ra_rand[idx_keep], dec_rand[idx_keep]
 
 
-def random_ra_dec_on_sphere(N_sphere):
-    us = np.random.uniform(size=N_sphere)
-    vs = np.random.uniform(size=N_sphere)
+def subsample_by_completeness(NSIDE, rng, ra_rand, dec_rand, gmag_data):
+    # pull gmags from data distribution (TODO: better way??)
+    gmag_rand = rng.choice(gmag_data, size=len(ra_rand), replace=True)
+    completeness = utils.get_completeness(ra_rand, dec_rand, gmag_rand)
+    idx_keep = indices_for_downsample(rng, completeness)
+    print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for completeness")
+    return ra_rand[idx_keep], dec_rand[idx_keep]
+
+
+def random_ra_dec_on_sphere(rng, N_sphere):
+    us = rng.random(size=N_sphere)
+    vs = rng.random(size=N_sphere)
     theta_sphere = 2 * np.pi * us
     phi_sphere = np.arccos(2*vs-1)
     
