@@ -235,3 +235,37 @@ def selectionFunction_orig(G,m10,model_params):
         predictedShape = f*m10 + (d-f)*lim + e
         
     return sigmoid(G, predictedG0, predictedInvslope, predictedShape)
+
+
+# following https://mathworld.wolfram.com/SphericalCoordinates.html
+def cartesian_to_spherical(x, y, z):
+    r       =  np.sqrt(x*x + y*y + z*z)
+    theta   =  np.arctan2(y,x)
+    phi     =  np.arccos(z/r)
+    return np.array([r, theta, phi])
+
+
+def spherical_to_cartesian(r, theta, phi):
+    x       =  r*np.cos(theta)*np.sin(phi)
+    y       =  r*np.sin(theta)*np.sin(phi)
+    z       =  r*np.cos(phi)
+    return np.array([x, y, z])
+
+
+def spherical_to_radec(theta, phi):
+    ra = theta * 180/np.pi #+ 180
+    dec = phi * 180/np.pi - 90  
+    return ra, dec 
+
+
+def cartesian_to_radec(x, y, z):
+    _, theta, phi = cartesian_to_spherical(x, y, z)
+    return spherical_to_radec(theta, phi)
+
+
+def Mpc_to_Mpcperh(distances_Mpc, cosmo):
+    return distances_Mpc * cosmo.h
+
+
+def Mpcperh_to_Mpc(distances_Mpcperh, cosmo):
+    return distances_Mpcperh / cosmo.h

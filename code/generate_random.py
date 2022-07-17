@@ -139,8 +139,7 @@ def random_ra_dec_on_sphere(rng, N_sphere):
     theta_sphere = 2 * np.pi * us
     phi_sphere = np.arccos(2*vs-1)
     
-    ra_sphere = theta_sphere * 180/np.pi #+ 180
-    dec_sphere = phi_sphere * 180/np.pi - 90
+    ra_sphere, dec_sphere = utils.spherical_to_radec(theta_sphere, phi_sphere)
     return ra_sphere, dec_sphere
 
 
