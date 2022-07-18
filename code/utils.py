@@ -77,6 +77,16 @@ def get_extinction(ra, dec, R=3.1):
     return R*ebv
 
 
+def get_dust_map(NSIDE, rng, R, N_points=None):
+    if N_points is None:
+        N_points = 30*hp.nside2npix(NSIDE)
+    ra_avrand, dec_avrand = random_ra_dec_on_sphere(rng, N_points)
+    av_avrand = get_extinction(ra_avrand*u.deg, dec_avrand*u.deg, R=R)
+    map_avmean_avrand, _ = get_map(NSIDE, ra_avrand, dec_avrand, quantity=av_avrand, 
+                                         func_name='mean', null_val=np.nan)
+    return map_avmean_avrand
+
+
 
 # copied from https://stackoverflow.com/questions/49372918/group-numpy-into-multiple-sub-arrays-using-an-array-of-values
 def groupby(values, group_indices):
@@ -237,6 +247,8 @@ def selectionFunction_orig(G,m10,model_params):
     return sigmoid(G, predictedG0, predictedInvslope, predictedShape)
 
 
+### Coordinates
+
 # following https://mathworld.wolfram.com/SphericalCoordinates.html
 def cartesian_to_spherical(x, y, z):
     r       =  np.sqrt(x*x + y*y + z*z)
@@ -262,6 +274,18 @@ def cartesian_to_radec(x, y, z):
     _, theta, phi = cartesian_to_spherical(x, y, z)
     return spherical_to_radec(theta, phi)
 
+
+def random_ra_dec_on_sphere(rng, N_sphere):
+    us = rng.random(size=N_sphere)
+    vs = rng.random(size=N_sphere)
+    theta_sphere = 2 * np.pi * us
+    phi_sphere = np.arccos(2*vs-1)
+    
+    ra_sphere, dec_sphere = spherical_to_radec(theta_sphere, phi_sphere)
+    return ra_sphere, dec_sphere
+
+
+### Units
 
 def Mpc_to_Mpcperh(distances_Mpc, cosmo):
     return distances_Mpc * cosmo.h

@@ -10,10 +10,8 @@ from Corrfunc.utils import convert_rp_pi_counts_to_wp
 
 
 def compute_wtheta(theta_edges, ra, dec, ra_rand, dec_rand,
-                   return_full_results=False):
-    
-    nthreads = 4
-    
+                   return_full_results=False, nthreads=4):
+        
     autocorr = 1
     start = time.time()
     DD_theta = DDtheta_mocks(autocorr, nthreads, theta_edges, ra, dec)

@@ -16,10 +16,12 @@ import masks
 def main():
 
     # save name
-    fac_rand = 10
+    fac_rand = 1
     dust = True
     completeness = True
     mask_plane = True
+    mask_mcs = True
+    mask_dust = True
     tag_rand = ''
     if dust:
         tag_rand += '_dust'
@@ -27,6 +29,10 @@ def main():
         tag_rand += '_completeness'
     if mask_plane:
         tag_rand += '_maskplane'
+    if mask_mcs:
+        tag_rand += '_maskmcs'
+    if mask_dust:
+        tag_rand += '_maskdust'
     fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
     overwrite = True
 
@@ -45,7 +51,11 @@ def main():
     # first get estimate of reduction factor (TODO: better way to do this?)
     print("Estimating reduction factor")
     N_rand_try = 10000
-    ra_rand, _ = generate_and_subsample(NSIDE, rng, N_rand_try, ra_data, dec_data, dust=dust)
+    ra_rand, _ = generate_and_subsample(NSIDE, rng, N_rand_try, ra_data, dec_data, 
+                                        dust=dust, completeness=completeness,
+                                        mask_plane=mask_plane, mask_mcs=mask_mcs,
+                                        mask_dust=mask_dust,
+                                        gmag_data=gmag_data)
     reduction_factor_estimate = len(ra_rand)/N_rand_try
 
     # Generate actual random, dividing by reduction factor
@@ -53,7 +63,8 @@ def main():
     print(f"Generating random with {fac_rand} times N_data")
     ra_rand, dec_rand = generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data,
                                                dust=dust, completeness=completeness,
-                                               mask_plane=mask_plane,
+                                               mask_plane=mask_plane, mask_mcs=mask_mcs,
+                                               mask_dust=mask_dust,
                                                gmag_data=gmag_data)
     print(f"Number of final random sources: {len(ra_rand)}")
 
@@ -66,13 +77,24 @@ def main():
 
 def generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data, 
                            dust=False, completeness=False, 
-                           mask_plane=False, gmag_data=None):
-    ra_rand, dec_rand = random_ra_dec_on_sphere(rng, N_rand_init)
+                           mask_plane=False, mask_mcs=False, mask_dust=None,
+                           gmag_data=None):
+    ra_rand, dec_rand = utils.random_ra_dec_on_sphere(rng, N_rand_init)
     # should i be masking the data too, before using it to compute Av function?
     if mask_plane:
         b_max = 10
         print(f"Masking galactic plane to b={b_max}")
-        ra_rand, dec_rand = subsample_by_mask(NSIDE, ra_rand, dec_rand, masks.galactic_plane_mask, [b_max])
+        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE, ra_rand, dec_rand, 
+                                                    masks.galactic_plane_mask, [b_max])
+    if mask_mcs:
+        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE, ra_rand, dec_rand, 
+                                                    masks.magellanic_clouds_mask, [])
+    if mask_dust:
+        Av_max = 0.2
+        map_Av = utils.get_dust_map(NSIDE, rng, R=3.1)
+        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE, ra_rand, dec_rand, 
+                                                    masks.galactic_dust_mask, 
+                                                    [Av_max, map_Av])                               
     if dust:
         ra_rand, dec_rand = subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data)
     # should this be sequential, or is there a better way?
@@ -81,18 +103,6 @@ def generate_and_subsample(NSIDE, rng, N_rand_init, ra_data, dec_data,
             raise ValueError("If getting completess, need to pass a G distribution 'gmag_data'!")
         subsample_by_completeness(NSIDE, rng, ra_rand, dec_rand, gmag_data)
     return ra_rand, dec_rand
-
-
-def subsample_by_mask(NSIDE, ra_rand, dec_rand, mask_func, mask_func_args):
-    mask = mask_func(NSIDE, *mask_func_args)
-    _, pixel_indices = utils.get_map(NSIDE, ra_rand, dec_rand)
-        
-    # TODO: better way to do this??
-    pixel_arr = np.arange(len(mask))
-    pixel_indices_keep = pixel_arr[mask]
-    idx_keep = np.in1d(pixel_indices, pixel_indices_keep, invert=True)
-    print(f"Masked {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
-    return ra_rand[idx_keep], dec_rand[idx_keep]
 
 
 def indices_for_downsample(rng, probability_accept):
@@ -106,10 +116,7 @@ def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1):
     # TODO: this needs to be R_G to get A_G, now it's R_v!
     # generate random just to compute the mean Av in each pixel;
     # think that generally this should be a different random than the one we're making
-    ra_avrand, dec_avrand = random_ra_dec_on_sphere(rng, 10*len(ra_data))
-    av_avrand = utils.get_extinction(ra_avrand*u.deg, dec_avrand*u.deg, R=R)
-    map_avmean_avrand, _ = utils.get_map(NSIDE, ra_avrand, dec_avrand, quantity=av_avrand, 
-                                         func_name='mean', null_val=np.nan)
+    map_avmean_avrand = utils.get_dust_map(NSIDE, rng, R=R)
    
     map_nqso_data, _ = utils.get_map(NSIDE, ra_data, dec_data)
     p_Av = fit_Av(NSIDE, map_avmean_avrand, map_nqso_data, av0_max=0.05)
@@ -131,16 +138,6 @@ def subsample_by_completeness(NSIDE, rng, ra_rand, dec_rand, gmag_data):
     idx_keep = indices_for_downsample(rng, completeness)
     print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for completeness")
     return ra_rand[idx_keep], dec_rand[idx_keep]
-
-
-def random_ra_dec_on_sphere(rng, N_sphere):
-    us = rng.random(size=N_sphere)
-    vs = rng.random(size=N_sphere)
-    theta_sphere = 2 * np.pi * us
-    phi_sphere = np.arccos(2*vs-1)
-    
-    ra_sphere, dec_sphere = utils.spherical_to_radec(theta_sphere, phi_sphere)
-    return ra_sphere, dec_sphere
 
 
 def prob_Av(A_v, norm): 
