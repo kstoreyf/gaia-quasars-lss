@@ -53,7 +53,8 @@ def magellanic_clouds_mask(NSIDE, fn_mask=None):
     return mask
 
 
-def galactic_dust_mask(NSIDE, Av_max, map_Av, fn_mask=None):
+def galactic_dust_mask(NSIDE, Av_max, R, rng, fn_mask=None):
+    map_Av = utils.get_dust_map(NSIDE, rng, R=R)
     mask = map_Av > Av_max 
     if fn_mask is not None:
         hp.write_map(mask, fn_mask)
@@ -68,7 +69,7 @@ def subsample_by_mask(NSIDE, ra_rand, dec_rand, mask_func, mask_func_args):
     pixel_arr = np.arange(len(mask))
     pixel_indices_keep = pixel_arr[mask]
     idx_keep = np.in1d(pixel_indices, pixel_indices_keep, invert=True)
-    print(f"Masked {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
+    print(f"Applied mask, kept {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
     return ra_rand[idx_keep], dec_rand[idx_keep]
 
 

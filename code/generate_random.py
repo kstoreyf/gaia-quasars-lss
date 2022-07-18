@@ -16,7 +16,7 @@ import masks
 def main():
 
     # save name
-    fac_rand = 1
+    fac_rand = 10
     dust = True
     completeness = True
     mask_plane = True
