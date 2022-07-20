@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import pandas as pd
 
 import healpy as hp
@@ -77,14 +78,25 @@ def get_extinction(ra, dec, R=3.1):
     return R*ebv
 
 
-def get_dust_map(NSIDE, rng, R, N_points=None):
-    if N_points is None:
-        N_points = 30*hp.nside2npix(NSIDE)
-    ra_avrand, dec_avrand = random_ra_dec_on_sphere(rng, N_points)
-    av_avrand = get_extinction(ra_avrand*u.deg, dec_avrand*u.deg, R=R)
-    map_avmean_avrand, _ = get_map(NSIDE, ra_avrand, dec_avrand, quantity=av_avrand, 
+def get_dust_map(NSIDE, R, fn_dustmap=None):
+    if fn_dustmap is not None and os.path.exists(fn_dustmap):
+        print(f"Dustmap already exists, loading from {fn_dustmap}")
+        return np.load(fn_dustmap)
+    print(f"Generating new dust map ({fn_dustmap}")
+    # fix this NSIDE to make dust map determinisitic 
+    NSIDE_high = 2048
+    NPIX_high = hp.nside2npix(NSIDE_high)
+    # get the positions and Av values at the center of a high-NSIDE map
+    print("NPIX for dust map sampling:", NPIX_high)
+    ra_high, dec_high = hp.pix2ang(NSIDE_high, np.arange(NPIX_high), lonlat=True)
+    av_high = get_extinction(ra_high*u.deg, dec_high*u.deg, R=R)
+    # Take the average over these points, so for a given NSIDE should get exact same map
+    map_avmean, _ = get_map(NSIDE, ra_high, dec_high, quantity=av_high, 
                                          func_name='mean', null_val=np.nan)
-    return map_avmean_avrand
+    if fn_dustmap is not None:
+        np.save(fn_dustmap, map_avmean)
+        print(f"Saved dust map to {fn_dustmap}")
+    return map_avmean
 
 
 
@@ -117,8 +129,9 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
         map = counts_by_pixel
     elif func_name=='mean':
         # sum of quantity over pixel
-        #vals_by_pixel = np.add.at(map, pixel_indices, values)
-        map = np.bincount(pixel_indices, weights=quantity, minlength=NPIX)
+        map = np.zeros(NPIX)
+        np.add.at(map, pixel_indices, quantity)
+        #map = np.bincount(pixel_indices, weights=quantity, minlength=NPIX)
         # divide by counts to get mean
         map /= counts_by_pixel 
 
@@ -134,16 +147,37 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
 
 ### Completeness model map functions
 
-def get_completeness(ra, dec, gmag):
-    fn_comp = '../data/completeness_allsky_m10_hpx7.h5'
-    dfm10 = pd.read_hdf(fn_comp, "data")
+def get_completeness(ra, dec, gmag, fn_params='../data/completeness_model_params.dat'):
+    """ Get the completeness for a a given value or list 
+    of ra(s), dec(s), G-band magnitude(s)
 
-    fn_params = '../data/completeness_model_params.dat'
+    Parameters
+    ----------
+    ra : nd.array
+        RA at which to evaluate the completeness model
+    dec : nd.array
+        dec at which to evaluate the completeness model
+    gmag : nd.array
+        G-band magnitude at which to evaluate the completeness model
+    fn_params : str (optional)
+        file path to model parameters to pass to selectionFunction function
+    Returns
+    -------
+    nd.array
+        Evaluation of the completeness model, in the range [0,1].
+    """
+
     model_params = np.loadtxt(fn_params)
-    
+
+    m10 = get_m10(ra, dec)
+    return selectionFunction(gmag, m10, model_params)
+
+
+def get_m10(ra, dec, fn_comp='../data/completeness_allsky_m10_hpx7.h5'):
+    dfm10 = pd.read_hdf(fn_comp, "data")
     pixel_indices = hp.ang2pix(128, ra, dec, lonlat=True, nest=True)
     m10 = dfm10[pixel_indices]
-    return selectionFunction(gmag, m10, model_params)
+    return m10
 
 
 def sigmoid(G, G0, invslope, shape):
@@ -214,38 +248,25 @@ def selectionFunction(G,m10,model_params):
     return sigmoid(G, predictedG0, predictedInvslope, predictedShape)
 
 
-def selectionFunction_orig(G,m10,model_params):
-    """ Predicts the completeness at magnitude G, given a value of M_10 read from a precomputed map. 
-    
-    Parameters
-    ----------
-    G:   nd.array
-            where to evaluate the function
-    m10: float
-            the value of M_10 in a given region
-    model_params: nd.array
-            the stored parameters of the trained model
-
-    Returns
-    -------
-    sf(G) between 0 and 1. 
-    """
-    a,b,c,d,e,f,x,y,z,lim,sigma = model_params
-    
-    predictedG0 = a*m10+b
-    if m10>lim:
-        predictedG0 = c*m10 + (a-c)*lim + b
-
-    predictedInvslope = x*m10+y
-    if m10>lim:
-        predictedInvslope = z*m10 + (x-z)*lim + y
-
-    predictedShape = d*m10+e
-    if m10>lim:
-        predictedShape = f*m10 + (d-f)*lim + e
-        
-    return sigmoid(G, predictedG0, predictedInvslope, predictedShape)
-
+def get_m10_map(NSIDE, fn_m10map=None):
+    if fn_m10map is not None and os.path.exists(fn_m10map):
+        print(f"Completness map already exists, loading from {fn_m10map}")
+        return np.load(fn_m10map)
+    print(f"Generating new dust map ({fn_m10map}")
+    # fix this NSIDE to make dust map determinisitic 
+    NSIDE_high = 2048
+    NPIX_high = hp.nside2npix(NSIDE_high)
+    # get the positions and Av values at the center of a high-NSIDE map
+    print("NPIX for dust map sampling:", NPIX_high)
+    ra_high, dec_high = hp.pix2ang(NSIDE_high, np.arange(NPIX_high), lonlat=True)
+    m10_high = get_m10(ra_high, dec_high)
+    # Take the average over these points, so for a given NSIDE should get exact same map
+    map_m10mean, _ = get_map(NSIDE, ra_high, dec_high, quantity=m10_high, 
+                                         func_name='mean', null_val=np.nan)
+    if fn_m10map is not None:
+        np.save(fn_m10map, map_m10mean)
+        print(f"Saved dust map to {fn_m10map}")
+    return map_m10mean
 
 ### Coordinates
 

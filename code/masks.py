@@ -53,9 +53,10 @@ def magellanic_clouds_mask(NSIDE, fn_mask=None):
     return mask
 
 
-def galactic_dust_mask(NSIDE, Av_max, R, rng, fn_mask=None):
-    map_Av = utils.get_dust_map(NSIDE, rng, R=R)
-    mask = map_Av > Av_max 
+def galactic_dust_mask(NSIDE, Av_max, R, fn_dustmap=None, fn_mask=None):
+    print(NSIDE, R, fn_dustmap)
+    map_avmean = utils.get_dust_map(NSIDE, R, fn_dustmap=fn_dustmap)
+    mask = map_avmean > Av_max 
     if fn_mask is not None:
         hp.write_map(mask, fn_mask)
     return mask
