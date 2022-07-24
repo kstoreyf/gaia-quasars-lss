@@ -24,7 +24,7 @@ def galactic_plane_mask(NSIDE, b_max, fn_mask=None):
     idx_keep = np.abs(bs.value) > b_max
     mask[idx_keep] = 0
     if fn_mask is not None:
-        hp.write_map(mask, fn_mask)
+        hp.write_map(fn_mask, mask)
     return mask
 
 
@@ -49,7 +49,7 @@ def magellanic_clouds_mask(NSIDE, fn_mask=None):
     mask[ipix_nolmc] = 1 
     mask[ipix_nosmc] = 1
     if fn_mask is not None:
-        hp.write_map(mask, fn_mask)
+        hp.write_map(fn_mask, mask)
     return mask
 
 
@@ -58,7 +58,7 @@ def galactic_dust_mask(NSIDE, Av_max, R, fn_dustmap=None, fn_mask=None):
     map_avmean = utils.get_dust_map(NSIDE, R, fn_dustmap=fn_dustmap)
     mask = map_avmean > Av_max 
     if fn_mask is not None:
-        hp.write_map(mask, fn_mask)
+        hp.write_map(fn_mask, mask)
     return mask
 
 

@@ -17,8 +17,10 @@ def main():
 
     # save name
     fac_rand = 1
-    dust = True
+    dust = False
     completeness = False
+    stardens = False
+    stardust = True
     mask_plane = False
     mask_mcs = False
     mask_dust = False
@@ -28,12 +30,18 @@ def main():
     Av_max = 0.2
     gmag_comp = 20.8
     R = 3.1
-    NSIDE_dustmap = 8
+    NSIDE_dustmap = 64
+    NSIDE_starmap = 64
+    NSIDE_stardustmap = 64
     #tag_rand = '_seed41'
     if dust:
         tag_rand += f'_dust{NSIDE_dustmap}'
     if completeness:
         tag_rand += f'_completeness{gmag_comp}'
+    if stardens:
+        tag_rand += f'_stardens{NSIDE_starmap}'
+    if stardust:
+        tag_rand += f'_stardust{NSIDE_stardustmap}'
     if mask_plane:
         tag_rand += f'_maskplane{b_max}'
     if mask_mcs:
@@ -47,6 +55,8 @@ def main():
     NSIDE_masks = 64
     rng = default_rng(seed=42)
     fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
+    fn_starmap = f'../data/stardensmap_NSIDE{NSIDE_starmap}.npy'
+    fn_stardustmap = f'../data/map_dust_stars_prob_NSIDE{NSIDE_stardustmap}.fits'
 
     # Load and set up data
     print("Loading data")
@@ -59,17 +69,25 @@ def main():
     # first get estimate of reduction factor (TODO: better way to do this?)
     print("Estimating reduction factor")
     N_rand_try = 10000
-    ra_rand, _ = generate_and_subsample(NSIDE_dustmap, rng, N_rand_try, ra_data, dec_data, 
-                                        dust=dust, completeness=completeness, 
-                                        fn_dustmap=fn_dustmap, gmag_comp=gmag_comp, R=R)
+    ra_rand, _ = generate_and_subsample(NSIDE_dustmap, NSIDE_starmap, 
+                                        NSIDE_stardustmap, rng, 
+                                        N_rand_try, ra_data, dec_data, 
+                                        dust=dust, completeness=completeness, stardens=stardens, stardust=stardust,
+                                        fn_dustmap=fn_dustmap, fn_starmap=fn_starmap, 
+                                        fn_stardustmap=fn_stardustmap,
+                                        gmag_comp=gmag_comp, R=R)
     reduction_factor_estimate = len(ra_rand)/N_rand_try
 
     # Generate actual random, dividing by reduction factor
     N_rand_init = int((fac_rand*N_data)/reduction_factor_estimate)
     print(f"Generating random with {fac_rand} times N_data")
-    ra_rand, dec_rand =  generate_and_subsample(NSIDE_dustmap, rng, N_rand_init, ra_data, dec_data, 
-                                        dust=dust, completeness=completeness, 
-                                        fn_dustmap=fn_dustmap, gmag_comp=gmag_comp, R=R)
+    ra_rand, dec_rand =  generate_and_subsample(NSIDE_dustmap, NSIDE_starmap, 
+                                        NSIDE_stardustmap, rng, 
+                                        N_rand_init, ra_data, dec_data, 
+                                        dust=dust, completeness=completeness, stardens=stardens, stardust=stardust,
+                                        fn_dustmap=fn_dustmap,  fn_starmap=fn_starmap, 
+                                        fn_stardustmap=fn_stardustmap, 
+                                        gmag_comp=gmag_comp, R=R)
     ra_rand, dec_rand = apply_masks(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
                                     mask_plane=mask_plane, mask_mcs=mask_mcs, 
                                     mask_dust=mask_dust,
@@ -84,18 +102,28 @@ def main():
     print(f"Wrote random to {fn_rand}!")
 
 
-def generate_and_subsample(NSIDE_dustmap, rng, N_rand_init, ra_data, dec_data, 
-                           dust=False, completeness=False, 
-                           fn_dustmap=None, gmag_comp=20.8, R=3.1):
+def generate_and_subsample(NSIDE_dustmap, NSIDE_starmap, NSIDE_stardustmap, rng, 
+                           N_rand_init, ra_data, dec_data, 
+                           dust=False, completeness=False, stardens=False, 
+                           stardust=False,
+                           fn_dustmap=None, fn_starmap=None, fn_stardustmap=None,
+                           gmag_comp=20.8, R=3.1):
     # gmag=20.8 is where completeness is 91.4% on average
     ra_rand, dec_rand = utils.random_ra_dec_on_sphere(rng, N_rand_init)
     # should this be sequential, or is there a better way?
     # should i be masking the data too, before using it to compute Av function?
     if dust:
-        ra_rand, dec_rand = subsample_by_dust(NSIDE_dustmap, rng, ra_rand, dec_rand, ra_data, dec_data,
-                                              R=R, fn_dustmap=fn_dustmap)
+        ra_rand, dec_rand = subsample_by_dust(NSIDE_dustmap, rng, ra_rand, dec_rand, 
+                                              ra_data, dec_data, R=R, fn_dustmap=fn_dustmap)
     if completeness:
         ra_rand, dec_rand = subsample_by_completeness(rng, ra_rand, dec_rand, gmag_comp)
+    if stardens:
+        ra_rand, dec_rand = subsample_by_stardens(NSIDE_starmap, rng, ra_rand, dec_rand, 
+                                                  ra_data, dec_data, fn_starmap=fn_starmap)
+    if stardust:
+        ra_rand, dec_rand = subsample_by_stardust(NSIDE_stardustmap, rng, 
+                                                  ra_rand, dec_rand, 
+                                                  fn_stardustmap=fn_stardustmap)
     return ra_rand, dec_rand
 
 
@@ -132,7 +160,7 @@ def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1, f
     map_avmean = utils.get_dust_map(NSIDE, R, fn_dustmap=fn_dustmap)
    
     map_nqso_data, _ = utils.get_map(NSIDE, ra_data, dec_data)
-    p_Av = fit_Av(NSIDE, map_avmean, map_nqso_data, av0_max=0.05)
+    p_Av = fit_reduction_vs_quantity(NSIDE, map_avmean, map_nqso_data, val0_max=0.05)
 
     # should i be getting these probabilities from exact spot on map,
     # or averaged for some reason?
@@ -154,18 +182,49 @@ def subsample_by_completeness(rng, ra_rand, dec_rand, gmag_comp):
     return ra_rand[idx_keep], dec_rand[idx_keep]
 
 
-def prob_Av(A_v, norm): 
-    return np.exp(-A_v/norm)
+def subsample_by_stardust(NSIDE_stardustmap, rng, ra_rand, dec_rand, fn_stardustmap=None):
+    # pull gmags from data distribution (TODO: better way??)
+    #gmag_rand = rng.choice(gmag_data, size=len(ra_rand), replace=True)
+    map_p_stardust = hp.read_map(fn_stardustmap)
+    _, pixel_indices_rand = utils.get_map(NSIDE_stardustmap, ra_rand, dec_rand)
+    p_stardust_rand = map_p_stardust[pixel_indices_rand]
+    assert np.all(p_stardust_rand>=0) and np.all(p_stardust_rand<=1), "Bad probability vals!" 
+    idx_keep = indices_for_downsample(rng, p_stardust_rand)
+    print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for stardust (stellar density + dust)")
+    return ra_rand[idx_keep], dec_rand[idx_keep]
+
+
+def subsample_by_stardens(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, fn_starmap=None):
+    map_stars = utils.get_star_map(NSIDE, fn_starmap=fn_starmap)
+    area_per_pixel = hp.nside2pixarea(NSIDE, degrees=True)
+    map_stardens = map_stars/area_per_pixel
+
+    map_nqso_data, _ = utils.get_map(NSIDE, ra_data, dec_data)
+    p_stardens = fit_reduction_vs_quantity(NSIDE, map_stardens, map_nqso_data, val0_max=10)
+
+    # here, subsampling based on the healpix map vals (unlike dust, for which we have a finer map!)    
+    _, pixel_indices_rand = utils.get_map(NSIDE, ra_rand, dec_rand)
+    stardens_rand = map_stardens[pixel_indices_rand]
+    p_accept = p_stardens(stardens_rand)
+    idx_keep = indices_for_downsample(rng, p_accept)
+    print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for stellar density")
+    return ra_rand[idx_keep], dec_rand[idx_keep]
+
+
+
+def exponential(x, norm): 
+    return np.exp(-x/norm)
 
 
 # av0_max is what counts as close enough to zero extinction, to get the
 # average with low extinction to set to full completeness
-def fit_Av(NSIDE, map_av, map_nqso, av0_max=0.02):
+def fit_reduction_vs_quantity(NSIDE, map_quantity, map_nqso, val0_max=0.02, params_initial_guess=[1]):
     area_per_pixel = hp.pixelfunc.nside2pixarea(NSIDE, degrees=True)
     map_ndens_qso = map_nqso/area_per_pixel
-    ndens_qso_at_av0 = np.mean(map_ndens_qso[map_av < av0_max])
-    prob_reduced = map_ndens_qso/ndens_qso_at_av0
-    return fit_subsample_prob(prob_Av, map_av, prob_reduced, params_initial_guess=[1])
+    ndens_qso_at_val0 = np.mean(map_ndens_qso[map_quantity < val0_max])
+    prob_reduced = map_ndens_qso/ndens_qso_at_val0
+    subsample_func = fit_subsample_prob(exponential, map_quantity, prob_reduced, params_initial_guess=params_initial_guess)
+    return subsample_func
 
 
 def fit_subsample_prob(function, x, y, params_initial_guess):

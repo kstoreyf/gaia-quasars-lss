@@ -145,6 +145,7 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
     return map, pixel_indices
 
 
+
 ### Completeness model map functions
 
 def get_completeness(ra, dec, gmag, fn_params='../data/completeness_model_params.dat'):
@@ -314,3 +315,20 @@ def Mpc_to_Mpcperh(distances_Mpc, cosmo):
 
 def Mpcperh_to_Mpc(distances_Mpcperh, cosmo):
     return distances_Mpcperh / cosmo.h
+
+
+# Other datasets
+
+def get_star_map(NSIDE, fn_starmap=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'):
+    if fn_starmap is not None and os.path.exists(fn_starmap):
+        print(f"Star map already exists, loading from {fn_starmap}")
+        return np.load(fn_starmap)
+    print(f"Generating new dust map ({fn_starmap})")
+    tab_stars = load_table(fn_stars)
+    # Take the average over these points, so for a given NSIDE should get exact same map
+    map_stars, _ = get_map(NSIDE, tab_stars['ra'], tab_stars['dec'], 
+                                   func_name='count', null_val=0)
+    if fn_starmap is not None:
+        np.save(fn_starmap, map_stars)
+        print(f"Saved star map to {fn_starmap}")
+    return map_stars
