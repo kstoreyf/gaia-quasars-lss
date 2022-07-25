@@ -2,6 +2,7 @@
 data/
 plots/
 logs/
+old/
 
 # jupyter
 #**/*.ipynb_checkpoints/
