@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=animate_Ne5_Mg
+#SBATCH --job-name=animate_pure_Nall_Mg
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=30GB
+#SBATCH --mem=50GB
 #SBATCH --time=24:00:00
 
 cd ~

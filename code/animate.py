@@ -15,16 +15,19 @@ from astropy import units as u
 
 
 def main():
-    fn_data = '../data/gaia_photoz.fits'
+    #fn_data = '../data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
+    fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
     format_save = 'gif'
-    N_sub_str = '1e3'
+    #N_sub_str = '1e6'
+    N_sub_str = 'all'
     property_colorby = 'M_absolute_g'
-    fn_save = f'../plots/animations/quasars_N{N_sub_str}_{property_colorby}.{format_save}'
-    redshift_name = 'redshift_photoz_est'
+    fn_save = f'../plots/animations/quasars_pure_N{N_sub_str}_{property_colorby}.{format_save}'
+    #redshift_name = 'redshift_photoz_est'
+    redshift_name = 'redshift_qsoc'
 
-    s = 0.5
-    alpha = 0.5
+    s = 0.1
+    alpha = 0.09
     lim = 2500
     vmin, vmax = -28, -20
 
@@ -36,9 +39,10 @@ def main():
     print("Loaded data with N =", len(data))
 
     # Subsample, if desired
-    N_sub = int(float(N_sub_str))
-    data = subsample(data, N_sub)
-    print("Subsampled data to N =", len(data))
+    if N_sub_str!='all':
+        N_sub = int(float(N_sub_str))
+        data = subsample(data, N_sub)
+        print("Subsampled data to N =", len(data))
 
     # Convert to cartesian
     print("Converting to cartesian")
