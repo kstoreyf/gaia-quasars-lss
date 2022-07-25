@@ -1,6 +1,7 @@
 # my dirs
 data/
 plots/
+old/
 
 # jupyter
 #**/*.ipynb_checkpoints/
