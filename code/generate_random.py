@@ -16,7 +16,7 @@ import masks
 def main():
 
     # save name
-    fac_rand = 1
+    fac_rand = 10
     dust = False
     completeness = False
     stardens = False
@@ -88,11 +88,12 @@ def main():
                                         fn_dustmap=fn_dustmap,  fn_starmap=fn_starmap, 
                                         fn_stardustmap=fn_stardustmap, 
                                         gmag_comp=gmag_comp, R=R)
-    ra_rand, dec_rand = apply_masks(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
+    idx_keep = get_mask_indices(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
                                     mask_plane=mask_plane, mask_mcs=mask_mcs, 
                                     mask_dust=mask_dust,
                                     fn_dustmap=fn_dustmap, b_max=b_max,
                                     Av_max=Av_max, R=R)
+    ra_rand, dec_rand = ra_rand[idx_keep], dec_rand[idx_keep]
     print(f"Number of final random sources: {len(ra_rand)}")
 
     # Save! 
@@ -127,23 +128,27 @@ def generate_and_subsample(NSIDE_dustmap, NSIDE_starmap, NSIDE_stardustmap, rng,
     return ra_rand, dec_rand
 
 
-def apply_masks(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
+def get_mask_indices(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
                 mask_plane=False, mask_mcs=False, 
                 mask_dust=None,
                 fn_dustmap=None, b_max=10,
                 Av_max=0.2, R=3.1):
+    idx_keep = np.full(len(ra_rand),True)
     if mask_plane:
         print(f"Masking galactic plane to b={b_max}")
-        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE_masks, ra_rand, dec_rand, 
+        idx_keep_m = masks.subsample_by_mask(NSIDE_masks, ra_rand, dec_rand, 
                                                     masks.galactic_plane_mask, [b_max])
+        idx_keep = idx_keep & idx_keep_m
     if mask_mcs:
-        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE_masks, ra_rand, dec_rand, 
+        idx_keep_m = masks.subsample_by_mask(NSIDE_masks, ra_rand, dec_rand, 
                                                     masks.magellanic_clouds_mask, [])
+        idx_keep = idx_keep & idx_keep_m
     if mask_dust:
-        ra_rand, dec_rand = masks.subsample_by_mask(NSIDE_dustmap, ra_rand, dec_rand, 
+        idx_keep_m = masks.subsample_by_mask(NSIDE_dustmap, ra_rand, dec_rand, 
                                                     masks.galactic_dust_mask, 
-                                                    [Av_max, R, fn_dustmap])                               
-    return ra_rand, dec_rand
+                                                    [Av_max, R, fn_dustmap])  
+        idx_keep = idx_keep & idx_keep_m                     
+    return idx_keep
 
 
 def indices_for_downsample(rng, probability_accept):
