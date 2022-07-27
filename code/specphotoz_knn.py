@@ -14,23 +14,26 @@ import utils
 
 def main():
 
+    # 
+    gmag_max = 20.5
+
     # save name
-    fn_spz = '../data/redshifts_spz_kNN.fits'
+    fn_spz = f'../data/redshifts_spz_kNN_G{gmag_max}.fits'
     overwrite = True
 
     # Load data
     print("Loading data")
-    fn_gaia = '../data/gaia_wise_panstarrs_tmass.fits.gz'
+    fn_gaia = '../data/gaia_slim.fits'
     tab_gaia = utils.load_table(fn_gaia)
     # TEST ONLY W SMALL AMOUNT
     #tab_gaia = tab_gaia[np.random.randint(0, len(tab_gaia), size=10000)]
     N_gaia = len(tab_gaia)
     print(f"Number of Gaia QSO candidates: {N_gaia}")
 
-    fn_sdss = '../data/SDSS_DR16Q_v4.fits'
+    fn_sdss = '../data/sdss_slim.fits'
     tab_sdss = utils.load_table(fn_sdss)
 
-    z_min = 0.01
+    z_min = 0.01 #magic #hyperparameter
     redshift_key = 'Z'
     idx_zgood = redshift_cut_index(tab_sdss, z_min, redshift_key)
     tab_sdss = tab_sdss[idx_zgood]
@@ -38,16 +41,19 @@ def main():
 
     print("Constructing feature matrix")
     # Get reddening
-    utils.add_ebv(tab_gaia)
+    if 'ebv' not in tab_gaia.columns:
+        utils.add_ebv(tab_gaia)
 
     # color cuts
-    utils.add_gaia_wise_colors(tab_gaia)
-    gmag_max = 20
+    gaia_wise_colors = ['g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
+    if np.any(np.in1d(gaia_wise_colors, tab_gaia.columns)):
+        utils.add_gaia_wise_colors(tab_gaia)
     color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
     idx_clean_gaia = cuts_index(tab_gaia, gmag_max, color_cuts) 
+    print("N_clean:", np.sum(idx_clean_gaia))
 
     # Construct full feature matrix
-    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
+    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
     X_gaia, idx_goodfeat = construct_X(tab_gaia, feature_keys)
     # these indexes are the ones we will estimate SPZs for
     idx_withspzs = idx_clean_gaia & idx_goodfeat
@@ -61,6 +67,7 @@ def main():
     # Cross-match
     print("Performing cross-match")
     separation = 1*u.arcsec
+    #TODO: be careful with multiples!
     index_list_gaiaINsdss, index_list_sdssINgaia = cross_match(tab_gaia_withspzs, 
                                            tab_gaia_withspzs['ra'], tab_gaia_withspzs['dec'],
                                            tab_sdss, tab_sdss['RA']*u.degree, tab_sdss['DEC']*u.degree,
@@ -79,7 +86,7 @@ def main():
 
     # Run kNN
     print("Running kNN")
-    K = 11
+    K = 11 #hyperparameter
     rng = default_rng()
     knn = spz_kNN(X_train, Y_train, X_apply, K=K)
     knn.cross_validate(rng)
@@ -123,8 +130,7 @@ def cuts_index(tab, gmag_max, color_cuts):
 
 
 def redshift_cut_index(tab, z_min, redshift_key):
-    #Include only SDSS quasars with z>0.01 (this removes zeros and nans, and maybe a few others)
-    z_min = 0.01
+    #Include only SDSS quasars with z>z_min (this removes zeros and nans, and maybe a few others)
     idx_zgood = tab[redshift_key] > z_min
     return idx_zgood
 
