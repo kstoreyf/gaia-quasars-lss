@@ -71,7 +71,7 @@ def subsample_by_mask(NSIDE, ra_rand, dec_rand, mask_func, mask_func_args):
     pixel_indices_keep = pixel_arr[mask]
     idx_keep = np.in1d(pixel_indices, pixel_indices_keep, invert=True)
     print(f"Applied mask, kept {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
-    return ra_rand[idx_keep], dec_rand[idx_keep]
+    return idx_keep
 
 
 if __name__=='__main__':

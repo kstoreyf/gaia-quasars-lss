@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=animate_pure_Nall_Mg
+#SBATCH --job-name=spz_G20.5
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=50GB
+#SBATCH --mem=20GB
 #SBATCH --time=24:00:00
 
 cd ~
@@ -14,7 +14,9 @@ exec --overlay $overlay_ext3:ro \
 -c "source /ext3/env.sh; \
 /bin/bash; \
 cd /home/ksf293/gaia-quasars-lss/code; \
-python animate.py;
+conda activate gaiaenv; \
+#python animate.py;
+python specphotoz_knn.py
 "
 
 

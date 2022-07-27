@@ -78,10 +78,11 @@ def get_extinction(ra, dec, R=3.1):
     return R*ebv
 
 
-def get_dust_map(NSIDE, R, fn_dustmap=None):
+def get_dust_map(NSIDE=None, R=None, fn_dustmap=None):
     if fn_dustmap is not None and os.path.exists(fn_dustmap):
         print(f"Dustmap already exists, loading from {fn_dustmap}")
         return np.load(fn_dustmap)
+    assert NSIDE is not None and R is not None, f"{fn_dustmap} doesn't exist; must pass NSIDE and R to generate!"
     print(f"Generating new dust map ({fn_dustmap}")
     # fix this NSIDE to make dust map determinisitic 
     NSIDE_high = 2048
@@ -292,9 +293,22 @@ def spherical_to_radec(theta, phi):
     return ra, dec 
 
 
+# TODO: phi here isnt the inverse of above, check!
+def radec_to_spherical(ra, dec):
+    theta = ra * np.pi/180
+    phi = (90 - dec) * np.pi/180
+    return theta, phi
+
+
 def cartesian_to_radec(x, y, z):
     _, theta, phi = cartesian_to_spherical(x, y, z)
     return spherical_to_radec(theta, phi)
+
+
+def radec_to_cartesian(r, ra, dec):    
+    theta, phi = radec_to_spherical(ra, dec)
+    x, y, z = spherical_to_cartesian(r, theta, phi)
+    return np.array([x, y, z])
 
 
 def random_ra_dec_on_sphere(rng, N_sphere):
@@ -319,11 +333,12 @@ def Mpcperh_to_Mpc(distances_Mpcperh, cosmo):
 
 # Other datasets
 
-def get_star_map(NSIDE, fn_starmap=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'):
+def get_star_map(NSIDE=None, fn_starmap=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'):
     if fn_starmap is not None and os.path.exists(fn_starmap):
         print(f"Star map already exists, loading from {fn_starmap}")
         return np.load(fn_starmap)
-    print(f"Generating new dust map ({fn_starmap})")
+    assert NSIDE is not None, f"{fn_starmap} doesn't exist; must pass NSIDE to generate!"
+    print(f"Generating new star map ({fn_starmap})")
     tab_stars = load_table(fn_stars)
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_stars, _ = get_map(NSIDE, tab_stars['ra'], tab_stars['dec'], 
@@ -332,3 +347,19 @@ def get_star_map(NSIDE, fn_starmap=None, fn_stars='../data/stars_gaia_G18.5-20.0
         np.save(fn_starmap, map_stars)
         print(f"Saved star map to {fn_starmap}")
     return map_stars
+
+
+def get_m10_map(NSIDE=None, fn_m10map=None, fn_comp='../data/completeness_allsky_m10_hpx7.h5'):
+    if fn_m10map is not None and os.path.exists(fn_m10map):
+        print(f"Star map already exists, loading from {fn_m10map}")
+        return np.load(fn_m10map)
+    assert NSIDE is not None, f"{fn_m10map} doesn't exist; must pass NSIDE to generate!"
+    print(f"Generating new m10 map ({fn_m10map})")
+    
+    df_m10 = pd.read_hdf(fn_comp, "data")
+    # m10 is in nested order! but we want ring, usually
+    map_m10 = hp.ud_grade(np.array(df_m10), NSIDE, order_in='NESTED', order_out='RING')
+    if fn_m10map is not None:
+        np.save(fn_m10map, map_m10)
+        print(f"Saved star map to {fn_m10map}")
+    return map_m10
