@@ -1,5 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=spz_G20.5
+##SBATCH --job-name=spz_G20.5
+#SBATCH --job-name=gen_rand_prob_G20
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
@@ -16,7 +17,8 @@ exec --overlay $overlay_ext3:ro \
 cd /home/ksf293/gaia-quasars-lss/code; \
 conda activate gaiaenv; \
 #python animate.py;
-python specphotoz_knn.py
+#python specphotoz_knn.py;
+python generate_random.py;
 "
 
 

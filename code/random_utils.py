@@ -49,7 +49,7 @@ def get_tabs_masked(df_rconfigs, ra_data, dec_data):
 
         tabs_r = get_tabs_subsampled(df_rconfigs)
             
-        fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
+        fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE_dustmap}.npy'
         ra_rand, dec_rand = tabs_r[i]['ra'], tabs_r[i]['dec']
         ra_rmask, dec_rmask = generate_random.get_mask_indices(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
                                         mask_plane=mask_plane, mask_mcs=mask_mcs, 
@@ -99,7 +99,7 @@ def get_idx_arrs_masked(df_rconfigs, ra_rand, dec_rand, ra_data, dec_data):
             Av_max = df_rconfigs['Av_max'][i]
             mask_dust = True
             
-        fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
+        fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE_dustmap}.npy'
         idx_rmask = generate_random.get_mask_indices(ra_rand, dec_rand, NSIDE_masks, NSIDE_dustmap,
                                         mask_plane=mask_plane, mask_mcs=mask_mcs, 
                                         mask_dust=mask_dust,

@@ -26,6 +26,7 @@ def main():
     mask_dust = False
     tag_rand = ''
 
+    G_max = 20
     b_max = 10
     Av_max = 0.2
     gmag_comp = 20.8
@@ -41,22 +42,25 @@ def main():
     if stardens:
         tag_rand += f'_stardens{NSIDE_starmap}'
     if stardust:
-        tag_rand += f'_stardust{NSIDE_stardustmap}'
+        tag_rand += f'_stardustm10{NSIDE_stardustmap}'
     if mask_plane:
         tag_rand += f'_maskplane{b_max}'
     if mask_mcs:
         tag_rand += '_maskmcs'
     if mask_dust:
         tag_rand += f'_maskdust{Av_max}'
+
+    tag_data = f'_G{G_max}'
+    tag_rand += tag_data
     fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
-    tag_data = '_spz_kNN'
     overwrite = True
 
     NSIDE_masks = 64
     rng = default_rng(seed=42)
     fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
     fn_starmap = f'../data/stardensmap_NSIDE{NSIDE_starmap}.npy'
-    fn_stardustmap = f'../data/map_dust_stars_prob_NSIDE{NSIDE_stardustmap}.fits'
+    #fn_stardustmap = f'../data/map_dust_stars_prob_NSIDE{NSIDE_stardustmap}.fits'
+    fn_stardustmap = f'../data/maps/map_probability_dust_stars_m10_NSIDE{NSIDE_stardustmap}_G{G_max}.fits'
 
     # Load and set up data
     print("Loading data")
