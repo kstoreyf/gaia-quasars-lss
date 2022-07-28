@@ -14,11 +14,10 @@ import utils
 
 def main():
 
-    # 
-    gmag_max = 20.5
+    G_max = 20.5
 
     # save name
-    fn_spz = f'../data/redshifts_spz_kNN_G{gmag_max}.fits'
+    fn_spz = f'../data/redshifts_spz_kNN_G{G_max}.fits'
     overwrite = True
 
     # Load data
@@ -49,7 +48,7 @@ def main():
     if np.any(np.in1d(gaia_wise_colors, tab_gaia.columns)):
         utils.add_gaia_wise_colors(tab_gaia)
     color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
-    idx_clean_gaia = cuts_index(tab_gaia, gmag_max, color_cuts) 
+    idx_clean_gaia = cuts_index(tab_gaia, G_max, color_cuts) 
     print("N_clean:", np.sum(idx_clean_gaia))
 
     # Construct full feature matrix
@@ -109,13 +108,13 @@ def main():
     print(f"Wrote specphotozs to {fn_spz}!")
 
 
-def cuts_index(tab, gmag_max, color_cuts):
+def cuts_index(tab, G_max, color_cuts):
 
     # start with all
     idx_clean = np.full(len(tab), True)
 
     # g magnitude cut
-    idx_gmagcut = (tab['phot_g_mean_mag'] < gmag_max)
+    idx_gmagcut = (tab['phot_g_mean_mag'] < G_max)
     idx_clean = idx_clean & idx_gmagcut
 
     # color cuts
