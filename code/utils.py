@@ -83,7 +83,7 @@ def get_dust_map(NSIDE=None, R=None, fn_dustmap=None):
         print(f"Dustmap already exists, loading from {fn_dustmap}")
         return np.load(fn_dustmap)
     assert NSIDE is not None and R is not None, f"{fn_dustmap} doesn't exist; must pass NSIDE and R to generate!"
-    print(f"Generating new dust map ({fn_dustmap}")
+    print(f"Generating new dust map ({fn_dustmap})")
     # fix this NSIDE to make dust map determinisitic 
     NSIDE_high = 2048
     NPIX_high = hp.nside2npix(NSIDE_high)
@@ -254,7 +254,7 @@ def get_m10_map(NSIDE, fn_m10map=None):
     if fn_m10map is not None and os.path.exists(fn_m10map):
         print(f"Completness map already exists, loading from {fn_m10map}")
         return np.load(fn_m10map)
-    print(f"Generating new dust map ({fn_m10map}")
+    print(f"Generating new m10 map ({fn_m10map})")
     # fix this NSIDE to make dust map determinisitic 
     NSIDE_high = 2048
     NPIX_high = hp.nside2npix(NSIDE_high)
