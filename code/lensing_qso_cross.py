@@ -9,7 +9,7 @@ import masks
 
 def main():
     #NSIDE = 2048
-    NSIDE = 512
+    NSIDE = 256
 
     G_max = 20
     fn_gaia = f'../data/gaia_G{G_max}.fits'
@@ -39,7 +39,8 @@ def main():
     Cls_qq_obj = compute_Cls(bins, map_overdensity, map_overdensity, mask_overdensity, mask_overdensity)
 
     ell_arr = bins.get_effective_ells()
-    result = np.array([ell_arr, Cls_kk_obj[0], Cls_kq_obj[0], Cls_qq_obj[0]])
+    Cl_objs = [Cls_kk_obj, Cls_kq_obj, Cls_qq_obj]
+    result = np.array([ell_arr, Cls_kk_obj[0], Cls_kq_obj[0], Cls_qq_obj[0], bins, Cl_objs])
     np.save(fn_Cls, result)
     print(f"Saved Cls to {fn_Cls}")
 

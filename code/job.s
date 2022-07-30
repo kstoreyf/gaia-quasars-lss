@@ -1,10 +1,11 @@
 #!/bin/bash
 ##SBATCH --job-name=spz_G20.5
-#SBATCH --job-name=gen_rand_prob_G20
+##SBATCH --job-name=gen_rand_prob_G20
+#SBATCH --job-name=lensing_qso_cross_G20_NSIDE2048
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=20GB
+#SBATCH --mem=50GB
 #SBATCH --time=24:00:00
 
 cd ~
@@ -18,7 +19,8 @@ cd /home/ksf293/gaia-quasars-lss/code; \
 conda activate gaiaenv; \
 #python animate.py;
 #python specphotoz_knn.py;
-python generate_random.py;
+#python generate_random.py;
+python lensing_qso_cross.py;
 "
 
 
