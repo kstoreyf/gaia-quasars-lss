@@ -25,6 +25,7 @@ def get_tabs_subsampled(df_rconfigs):
         tabs_r.append(tab_r)
     return tabs_r
 
+
 def get_tabs_masked(df_rconfigs, ra_data, dec_data):
 
     NSIDE_masks = 64

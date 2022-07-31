@@ -75,13 +75,34 @@ def subsample_by_mask(NSIDE, ra, dec, mask_func, mask_func_args):
     return idx_keep
 
 
-def subsample_mask_indices(NSIDE, ra, dec, mask):
-    _, pixel_indices = utils.get_map(NSIDE, ra, dec)
+def subsample_mask_indices(ra, dec, mask):
+    npix = len(mask)
+    nside = hp.npix2nside(npix)
+    _, pixel_indices = utils.get_map(nside, ra, dec)
     # TODO: better way to do this??
     pixel_indices_keep = np.where(mask==0)[0]
     idx_keep = np.in1d(pixel_indices, pixel_indices_keep)
     print(f"Applied mask, kept {np.sum(idx_keep)/len(idx_keep):.3f} of sources")
     return idx_keep
+
+
+def get_qso_mask(NSIDE, mask_names_gaia, b_max=None, Av_max=None, R=3.1):
+    print("Getting QSO mask")
+
+    fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE}.npy'
+    # dict points to tuple with masks and extra args
+    mask_gaia_dict = {'plane': (galactic_plane_mask, [b_max]),
+                  'mcs': (magellanic_clouds_mask, []),
+                  'dust': (galactic_dust_mask, [Av_max, R, fn_dustmap])}
+    NPIX = hp.nside2npix(NSIDE)
+    # masks have 1s where to mask. if current mask OR new
+    # mask has a 1, want a 1, so we need OR
+    mask_qso = np.zeros(NPIX, dtype=bool) # zeros mean no mask
+    for mask_name in mask_names_gaia:
+        mask_func, mask_func_args = mask_gaia_dict[mask_name]
+        mask = mask_func(NSIDE, *mask_func_args)
+        mask_qso = (mask_qso | mask)
+    return mask_qso
 
 
 if __name__=='__main__':

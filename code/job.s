@@ -1,7 +1,8 @@
 #!/bin/bash
 ##SBATCH --job-name=spz_G20.5
-##SBATCH --job-name=gen_rand_prob_G20
+##SBATCH --job-name=gen_rand_prob_G20_1x
 #SBATCH --job-name=lensing_qso_cross_G20_NSIDE2048
+##SBATCH --job-name=xi_G20_bw4_jack12
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
@@ -21,6 +22,7 @@ conda activate gaiaenv; \
 #python specphotoz_knn.py;
 #python generate_random.py;
 python lensing_qso_cross.py;
+#python correlations.py;
 "
 
 
