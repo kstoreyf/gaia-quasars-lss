@@ -8,8 +8,8 @@ import masks
 
 
 def main():
-    #NSIDE = 2048
-    NSIDE = 256
+    NSIDE = 2048
+    #NSIDE = 256
 
     G_max = 20
     fn_gaia = f'../data/gaia_G{G_max}.fits'
@@ -24,7 +24,7 @@ def main():
     mask_lensing = get_planck_lensing_mask(NSIDE)
     map_lensing = get_planck_lensing_map(NSIDE)
 
-    mask_overdensity = get_qso_mask(NSIDE, mask_names_gaia, Av_max=Av_max)
+    mask_overdensity = masks.get_qso_mask(NSIDE, mask_names_gaia, Av_max=Av_max)
     map_overdensity = get_qso_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_overdensity)
 
     # "We choose a conservative binning scheme with linearly spaced bins of
@@ -40,7 +40,8 @@ def main():
 
     ell_arr = bins.get_effective_ells()
     Cl_objs = [Cls_kk_obj, Cls_kq_obj, Cls_qq_obj]
-    result = np.array([ell_arr, Cls_kk_obj[0], Cls_kq_obj[0], Cls_qq_obj[0], bins, Cl_objs])
+    # Can't save bins or Cl_objs objects - get error "TypeError: cannot pickle 'SwigPyObject' object"
+    result = np.array([ell_arr, Cls_kk_obj[0], Cls_kq_obj[0], Cls_qq_obj[0]])
     np.save(fn_Cls, result)
     print(f"Saved Cls to {fn_Cls}")
 
@@ -80,9 +81,9 @@ def get_qso_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_qso):
     tab_gaia = utils.load_table(fn_gaia)
     tab_rand = utils.load_table(fn_rand)
 
-    idx_keep_gaia = masks.subsample_mask_indices(NSIDE, tab_gaia['ra'], tab_gaia['dec'], mask_qso)
+    idx_keep_gaia = masks.subsample_mask_indices(tab_gaia['ra'], tab_gaia['dec'], mask_qso)
     tab_gaia = tab_gaia[idx_keep_gaia]
-    idx_keep_rand = masks.subsample_mask_indices(NSIDE, tab_rand['ra'], tab_rand['dec'], mask_qso)
+    idx_keep_rand = masks.subsample_mask_indices(tab_rand['ra'], tab_rand['dec'], mask_qso)
     tab_rand = tab_rand[idx_keep_rand]
 
     map_nqso_gaia, _ = utils.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
@@ -90,31 +91,13 @@ def get_qso_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_qso):
 
     #"The weighted random counts in each Healpix pixel then form the “random map”. The overdensity field is defined as the “LRG map” divided by the “random map”, normalized to mean density and mean subtracted." (White 2022)
     #TODO: figure out what to do about these zeros!
-    map_overdensity = map_nqso_gaia / map_nqso_rand
-    idx_odens_finite = np.isfinite(map_overdensity)
-    map_overdensity /= np.mean(map_overdensity[idx_odens_finite]) #?? is this what normalized to mean density means?
-    map_overdensity -= np.mean(map_overdensity[idx_odens_finite])
-    map_overdensity[~idx_odens_finite] = hp.UNSEEN
+    map_ratio = map_nqso_gaia / map_nqso_rand
+    idx_finite = np.isfinite(map_ratio)
+    map_overdensity = np.full(map_ratio.shape, hp.UNSEEN)
+
+    # This is now another overdensity tho, maybe don't want this if have randoms??
+    map_overdensity[idx_finite] = map_ratio[idx_finite]/np.mean(map_ratio[idx_finite]) - 1
     return map_overdensity
-
-
-def get_qso_mask(NSIDE, mask_names_gaia, b_max=None, Av_max=None, R=3.1):
-    print("Getting QSO mask")
-
-    fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE}.npy'
-    # dict points to tuple with masks and extra args
-    mask_gaia_dict = {'plane': (masks.galactic_plane_mask, [b_max]),
-                  'mcs': (masks.magellanic_clouds_mask, []),
-                  'dust': (masks.galactic_dust_mask, [Av_max, R, fn_dustmap])}
-    NPIX = hp.nside2npix(NSIDE)
-    # masks have 1s where to mask. if current mask OR new
-    # mask has a 1, want a 1, so we need OR
-    mask_qso = np.zeros(NPIX, dtype=bool) # zeros mean no mask
-    for mask_name in mask_names_gaia:
-        mask_func, mask_func_args = mask_gaia_dict[mask_name]
-        mask = mask_func(NSIDE, *mask_func_args)
-        mask_qso = (mask_qso | mask)
-    return mask_qso
 
 
 def get_mask_indices_keep(NSIDE, ra, dec, mask_names_gaia):
