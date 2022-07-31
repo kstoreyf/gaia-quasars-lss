@@ -10,6 +10,32 @@ from astropy.table import Table
 from dustmaps.sfd import SFDQuery
 
 
+def jackknife(func, data, rand, *args, **kwargs):
+    n = 12 # magic
+    l_name = "l"
+    assert np.all(data[l_name] >= 0.*u.deg) and np.all(data[l_name] < 360.*u.deg) # seriously; degrees?
+    assert np.all(rand[l_name] >= 0.*u.deg) and np.all(rand[l_name] < 360.*u.deg)
+    dl = 360. / n
+    def one_jack(i):
+        l1 = (i * dl)*u.deg
+        l2 = ((i + 1) * dl)*u.deg
+        idx_data = (data[l_name] < l1) | (data[l_name] >= l2)
+        idx_rand = (rand[l_name] < l1) | (rand[l_name] >= l2)
+        kwargs['jack'] = i
+        return func(data[idx_data], rand[idx_rand], *args, **kwargs)
+    outs = np.array(list(map(one_jack, range(n))))
+    return jackknife_mean_var(outs)
+
+
+def jackknife_mean_var(values):
+    values = np.array(values)
+    n = values.shape[0]
+    print(f"Jackknife mean & var with n={n}")
+    mean = np.mean(values, axis=0)
+    var = ((n - 1) / n) * np.sum((values - mean) ** 2, axis=0)
+    return mean, var
+
+
 def get_fraction_recovered(Y_true, Y_hat, z_err_close):
         return np.sum(np.abs(Y_true - Y_hat) < z_err_close) / len(Y_true)
 
@@ -121,7 +147,7 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
     assert func_name in ['count', 'mean'], f"Function {func_name} not recognized!"
 
     NPIX = hp.nside2npix(NSIDE)
-    pixel_indices = hp.ang2pix(NSIDE, ra, dec, lonlat=True)
+    pixel_indices = hp.ang2pix(NSIDE, ra.value, dec.value, lonlat=True)
 
     # via https://stackoverflow.com/a/23914036
     # and https://stackoverflow.com/a/58600295
@@ -289,7 +315,9 @@ def spherical_to_cartesian(r, theta, phi):
 
 def spherical_to_radec(theta, phi):
     ra = theta * 180/np.pi #+ 180
-    dec = phi * 180/np.pi - 90  
+    #dec = phi * 180/np.pi - 90  
+    print("utils.spherical_to_radec: changed this! fix surrounding code if this breaks")
+    dec = 90 - phi * 180/np.pi
     return ra, dec 
 
 
@@ -318,7 +346,7 @@ def random_ra_dec_on_sphere(rng, N_sphere):
     phi_sphere = np.arccos(2*vs-1)
     
     ra_sphere, dec_sphere = spherical_to_radec(theta_sphere, phi_sphere)
-    return ra_sphere, dec_sphere
+    return ra_sphere*u.deg, dec_sphere*u.deg
 
 
 ### Units
