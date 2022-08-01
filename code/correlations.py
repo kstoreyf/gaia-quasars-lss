@@ -25,8 +25,8 @@ def main():
 
 def run():
 
-    mode = 'jackknife'
-    # mode = 'single'
+    #mode = 'jackknife'
+    mode = 'single'
 
     G_max = 20
     fn_data = f'../data/gaia_G{G_max}.fits'

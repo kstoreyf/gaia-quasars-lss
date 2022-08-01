@@ -8,7 +8,7 @@ import utils
 def main():
     #gaia_slim()
     #save_subset_with_spzs()
-    save_subset(G_max=20.4)
+    save_subset(G_max=19.8)
 
 
 def gaia_slim(overwrite=False):
