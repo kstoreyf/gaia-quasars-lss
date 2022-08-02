@@ -14,10 +14,10 @@ import utils
 
 def main():
 
-    G_max = 20.5
+    G_max = 20.5s
 
     # save name
-    fn_spz = f'../data/redshifts_spz_kNN_G{G_max}.fits'
+    fn_spz = f'../data/redshifts_spz_kNN_G{G_max}_noself.fits'
     overwrite = True
 
     # Load data
@@ -66,7 +66,6 @@ def main():
     # Cross-match
     print("Performing cross-match")
     separation = 1*u.arcsec
-    #TODO: be careful with multiples!
     index_list_gaiaINsdss, index_list_sdssINgaia = cross_match(tab_gaia_withspzs, 
                                            tab_gaia_withspzs['ra'], tab_gaia_withspzs['dec'],
                                            tab_sdss, tab_sdss['RA']*u.degree, tab_sdss['DEC']*u.degree,
@@ -78,7 +77,6 @@ def main():
     # (TODO: is this correct??)
     X_apply = X_gaia_withspzs
 
-    #Y_train = tab_sdss[index_list_sdssINgaia]['Z']
     Y_train = tab_sdss[index_list_sdssINgaia]['Z']
     print(f"X_train: {X_train.shape}, Y_train: {Y_train.shape}, X_apply: {X_apply.shape}")
     assert X_train.shape[0]==Y_train.shape[0], "X and Y must have same length!"
@@ -134,18 +132,18 @@ def redshift_cut_index(tab, z_min, redshift_key):
     return idx_zgood
 
 
+# gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
 def cross_match(tab1, ra1, dec1,
                 tab2, ra2, dec2, separation):
     coords1 = SkyCoord(ra=ra1, dec=dec1, frame='icrs')    
     coords2 = SkyCoord(ra=ra2, dec=dec2, frame='icrs') 
-    cross = astropy.coordinates.search_around_sky(coords1, coords2, separation) 
-    index_list_1in2, index_list_2in1 = cross[0], cross[1] 
-    # true / false list the length of tab1 if the match is in tab1
-    #idx_1in2 = np.in1d(np.arange(len(tab1)), index_list_1in2)
-    # true / false list the length of tab2 if the match is in tab2
-    #idx_2in1 = np.in1d(np.arange(len(tab2)), index_list_2in1)
-    #return idx_1in2, idx_2in1
-    # for now just return index lists, less scary
+    index_list_all, sep2d, _ = astropy.coordinates.match_coordinates_sky(coords1, coords2, nthneighbor=1)
+    idx_close = sep2d < separation
+    # The indices that match_coordinates produces are into coord2; get only the ones with close match
+    index_list_2in1 = index_list_all[idx_close]
+    # index_list_all has shape coords1, so the locations of the close matches are where in coords1
+    # the matches are
+    index_list_1in2 = np.where(idx_close)[0]
     return index_list_1in2, index_list_2in1
 
 
@@ -189,10 +187,12 @@ class spz_kNN():
             idx_valid = i_samples_loo == i_sample_val
             X_train_loo, Y_train_loo = self.X_train[idx_train], self.Y_train[idx_train]
             X_valid_loo = self.X_train[idx_valid]
-            
+
             # construct tree
+            print(X_train_loo.shape)
             tree_loo = self.build_tree(X_train_loo)
-            Y_hat_valid_loo, sigma_z_valid_loo = self.get_median_kNNs(X_valid_loo, Y_train_loo, tree_loo)
+            # TODO: only passing X train to check things, can delete that kwarg
+            Y_hat_valid_loo, sigma_z_valid_loo = self.get_median_kNNs(X_valid_loo, Y_train_loo, tree_loo, X_train=X_train_loo)
             
             self.Y_hat_valid[idx_valid] = Y_hat_valid_loo
             self.sigma_z_valid[idx_valid] = sigma_z_valid_loo
@@ -222,10 +222,19 @@ class spz_kNN():
         return KDTree(X_train)
 
 
-    def get_median_kNNs(self, X_apply, Y_train, tree):
+    def get_median_kNNs(self, X_apply, Y_train, tree, X_train=None):
         print("Getting median Z of nearest neighbors")
-        dists, inds = tree.query(X_apply, k=self.K)
-        low_z, Y_hat, up_z = np.percentile(Y_train[inds], (2.5, 50, 97.5), axis=1)
+        dists, inds = tree.query(X_apply, k=self.K+1)
+        # if nearest neighbor is itself (dist~0), exclude that one;
+        # to do this, need to get more neighbors than maybe necessary
+        # to keep it at K overall
+        dist_min = 1e-8 #hack
+        idx_nearest_dist0 = dists[:,0] < dist_min
+        print(f"A fraction {np.sum(idx_nearest_dist0)/len(idx_nearest_dist0):.3f} of objects have nearest neighbor w dist zero; cutting these from median")
+        inds_nodist0 = np.empty((inds.shape[0], self.K), dtype=int)
+        inds_nodist0[idx_nearest_dist0] = inds[idx_nearest_dist0,1:]
+        inds_nodist0[~idx_nearest_dist0] = inds[~idx_nearest_dist0,:-1]
+        low_z, Y_hat, up_z = np.percentile(Y_train[inds_nodist0], (2.5, 50, 97.5), axis=1)
         sigma_z = (up_z - low_z)/4
         return Y_hat, sigma_z
 
