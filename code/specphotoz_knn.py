@@ -14,7 +14,7 @@ import utils
 
 def main():
 
-    G_max = 20.5s
+    G_max = 20.5
 
     # save name
     fn_spz = f'../data/redshifts_spz_kNN_G{G_max}_noself.fits'
