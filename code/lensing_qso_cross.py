@@ -11,7 +11,7 @@ def main():
     NSIDE = 2048
     #NSIDE = 256
 
-    G_max = 20
+    G_max = 20.0
     fn_gaia = f'../data/gaia_G{G_max}.fits'
     fn_rand = f'../data/randoms/random_stardustm1064_G{G_max}_10x.fits'
     mask_names_gaia = ['mcs', 'dust']
