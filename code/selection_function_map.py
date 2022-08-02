@@ -12,11 +12,12 @@ def main():
 
     map_names = ['dust', 'stars', 'm10']
     NSIDE = 64
-    G_max = 20
-    fit_with_mask_mcs = True
+    G_max = 19.9
+    fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.npy"
+    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.fits"
+    overwrite = True
 
     print("Loading data")
     fn_gaia = f'../data/gaia_G{G_max}.fits' 
@@ -67,7 +68,7 @@ def main():
     # TODO: save map!
     print("Making probability map")
     map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps)
-    np.save(fn_prob, map_prob)
+    hp.write_map(fn_prob, map_prob, overwrite=overwrite)
     print(f"Saved map to {fn_prob}!")
 
 
@@ -94,6 +95,7 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps):
 
 def load_maps(NSIDE, map_names):
     maps = []
+    # TODO: should be writing these maps with hp.write_map() to a fits file!
     for map_name in map_names:
         fn_map = f'../data/maps/map_{map_name}_NSIDE{NSIDE}.npy'
         maps.append( np.load(fn_map) )
