@@ -99,9 +99,12 @@ def main():
                                     Av_max=Av_max, R=R)
     ra_rand, dec_rand = ra_rand[idx_keep], dec_rand[idx_keep]
     print(f"Number of final random sources: {len(ra_rand)}")
+    print(np.min(ra_rand), np.max(ra_rand))
+    print(np.min(dec_rand), np.max(dec_rand))
     # Save! 
-    result = [ra_rand, dec_rand]
-    col_names = ['ra', 'dec']
+    ebv_rand = utils.get_ebv(ra_rand, dec_rand)
+    result = [ra_rand, dec_rand, ebv_rand]
+    col_names = ['ra', 'dec', 'ebv']
     utils.write_table(fn_rand, result, col_names, overwrite=overwrite)
     print(f"Wrote random to {fn_rand}!")
 
@@ -165,9 +168,9 @@ def subsample_by_dust(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, R=3.1, f
     # TODO: this needs to be R_G to get A_G, now it's R_v!
     # generate random just to compute the mean Av in each pixel;
     # think that generally this should be a different random than the one we're making
-    map_avmean = utils.get_dust_map(NSIDE, R, fn_dustmap=fn_dustmap)
+    map_avmean = utils.get_dust_map(NSIDE, R, fn_map=fn_dustmap)
    
-    map_nqso_data, _ = utils.get_map(NSIDE, ra_data, dec_data)
+    map_nqso_data, _ = maps.get_map(NSIDE, ra_data, dec_data)
     p_Av = fit_reduction_vs_quantity(NSIDE, map_avmean, map_nqso_data, val0_max=0.05)
 
     # should i be getting these probabilities from exact spot on map,
@@ -194,7 +197,7 @@ def subsample_by_prob_map(NSIDE_probmap, rng, ra_rand, dec_rand, fn_probmap=None
     # pull gmags from data distribution (TODO: better way??)
     #gmag_rand = rng.choice(gmag_data, size=len(ra_rand), replace=True)
     map_p = hp.read_map(fn_probmap)
-    _, pixel_indices_rand = utils.get_map(NSIDE_probmap, ra_rand, dec_rand)
+    _, pixel_indices_rand = maps.get_map(NSIDE_probmap, ra_rand, dec_rand)
     p_rand = map_p[pixel_indices_rand]
     assert np.all(p_rand>=0) and np.all(p_rand<=1), "Bad probability vals!" 
     idx_keep = indices_for_downsample(rng, p_rand)
@@ -203,15 +206,15 @@ def subsample_by_prob_map(NSIDE_probmap, rng, ra_rand, dec_rand, fn_probmap=None
 
 
 def subsample_by_stardens(NSIDE, rng, ra_rand, dec_rand, ra_data, dec_data, fn_starmap=None):
-    map_stars = utils.get_star_map(NSIDE, fn_starmap=fn_starmap)
+    map_stars = maps.get_star_map(NSIDE, fn_map=fn_starmap)
     area_per_pixel = hp.nside2pixarea(NSIDE, degrees=True)
     map_stardens = map_stars/area_per_pixel
 
-    map_nqso_data, _ = utils.get_map(NSIDE, ra_data, dec_data)
+    map_nqso_data, _ = maps.get_map(NSIDE, ra_data, dec_data)
     p_stardens = fit_reduction_vs_quantity(NSIDE, map_stardens, map_nqso_data, val0_max=10)
 
     # here, subsampling based on the healpix map vals (unlike dust, for which we have a finer map!)    
-    _, pixel_indices_rand = utils.get_map(NSIDE, ra_rand, dec_rand)
+    _, pixel_indices_rand = maps.get_map(NSIDE, ra_rand, dec_rand)
     stardens_rand = map_stardens[pixel_indices_rand]
     p_accept = p_stardens(stardens_rand)
     idx_keep = indices_for_downsample(rng, p_accept)

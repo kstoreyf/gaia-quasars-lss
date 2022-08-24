@@ -6,6 +6,7 @@ from astropy.coordinates import Galactic, SkyCoord
 from astropy import units as u
 
 import utils
+import maps
 
 
 def main():
@@ -56,7 +57,7 @@ def magellanic_clouds_mask(NSIDE, fn_mask=None):
 
 def galactic_dust_mask(NSIDE, Av_max, R, fn_dustmap=None, fn_mask=None):
     print(NSIDE, R, fn_dustmap)
-    map_avmean = utils.get_dust_map(NSIDE, R, fn_dustmap=fn_dustmap)
+    map_avmean = maps.get_dust_map(NSIDE, R, fn_map=fn_dustmap)
     mask = map_avmean > Av_max 
     if fn_mask is not None:
         hp.write_map(fn_mask, mask)
@@ -65,7 +66,7 @@ def galactic_dust_mask(NSIDE, Av_max, R, fn_dustmap=None, fn_mask=None):
 
 def subsample_by_mask(NSIDE, ra, dec, mask_func, mask_func_args):
     mask = mask_func(NSIDE, *mask_func_args)
-    _, pixel_indices = utils.get_map(NSIDE, ra, dec)
+    _, pixel_indices = maps.get_map(NSIDE, ra, dec)
         
     # TODO: better way to do this??
     pixel_arr = np.arange(len(mask))
@@ -78,7 +79,7 @@ def subsample_by_mask(NSIDE, ra, dec, mask_func, mask_func_args):
 def subsample_mask_indices(ra, dec, mask):
     npix = len(mask)
     nside = hp.npix2nside(npix)
-    _, pixel_indices = utils.get_map(nside, ra, dec)
+    _, pixel_indices = maps.get_map(nside, ra, dec)
     # TODO: better way to do this??
     pixel_indices_keep = np.where(mask==0)[0]
     idx_keep = np.in1d(pixel_indices, pixel_indices_keep)

@@ -6,9 +6,13 @@ import utils
 
 
 def main():
-    #gaia_slim()
-    #save_subset_with_spzs()
-    save_subset(G_max=19.8)
+    overwrite = True
+    #gaia_slim(overwrite=overwrite)
+    G_maxs = [19.8, 19.9, 20.1, 20.2, 20.3, 20.4]
+    #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.4]
+    #G_maxs = [20.0]
+    for G_max in G_maxs:
+        gaia_subset(G_max=G_max, overwrite=overwrite)
 
 
 def gaia_slim(overwrite=False):
@@ -16,18 +20,21 @@ def gaia_slim(overwrite=False):
     fn_gaia_slim = '../data/gaia_slim.fits'
    
     # data paths 
-    fn_gaia = '../data/gaia_wise_panstarrs_tmass.fits.gz'
+    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
 
     # Load data
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
+    print(tab_gaia.columns)
 
     # Create and save
     columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
                         'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
                         'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
                         'w1mpro', 'w2mpro', 'allwise_oid',
-                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc']
+                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
+                        'parallax', 'parallax_error', 
+                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error']
     tab_gaia_slim = save_slim_table(tab_gaia, columns_to_keep, fn_gaia_slim, overwrite=overwrite)
 
 
@@ -47,7 +54,7 @@ def sdss_slim(overwrite=False):
     save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
 
 
-def save_subset(G_max, overwrite=False):
+def gaia_subset(G_max, overwrite=False):
     # save name
     fn_gaia_withspz = f'../data/gaia_G{G_max}.fits'
 
@@ -78,7 +85,9 @@ def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False):
         Rv = 3.1
         Av = Rv*tab['ebv']
         tab.add_column(Av, name='A_v')
-
+    if 'pm' in columns_to_keep:
+        pm = np.sqrt(tab['pmra']**2 + tab['pmdec']**2)
+        tab.add_column(pm, name='pm')
     tab.keep_columns(columns_to_keep)
     tab.write(fn_save, overwrite=overwrite)
     print(f"Wrote table with {len(tab)} objects to {fn_save}")

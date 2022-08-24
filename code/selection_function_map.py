@@ -5,14 +5,15 @@ import george
 
 import utils
 import masks
-
+import maps
 
 
 def main():
 
     map_names = ['dust', 'stars', 'm10']
-    NSIDE = 64
-    G_max = 19.9
+    NSIDE = 256
+    #G_max = 19.9
+    G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
@@ -24,12 +25,12 @@ def main():
     tab_gaia = utils.load_table(fn_gaia)
 
     print("Making QSO map")
-    maps = load_maps(NSIDE, map_names)
-    map_nqso_data, _ = utils.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+    maps_forsel = load_maps(NSIDE, map_names)
+    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
 
     print("Constructing X and y")
     NPIX = hp.nside2npix(NSIDE)
-    X_train_full = construct_X(NPIX, map_names, maps)
+    X_train_full = construct_X(NPIX, map_names, maps_forsel)
     y_train_full = map_nqso_data
     y_err_train_full = np.sqrt(y_train_full) # assume poission error
 
@@ -67,16 +68,16 @@ def main():
 
     # TODO: save map!
     print("Making probability map")
-    map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps)
+    map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel)
     hp.write_map(fn_prob, map_prob, overwrite=overwrite)
     print(f"Saved map to {fn_prob}!")
 
 
 #hack! better way?
-def map_expected_to_probability(map_expected, map_true, map_names, maps):
+def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
     idx_clean = np.full(len(map_expected), True)
     clean_lim_dict = {'dust': 0.3, 'stars': 15, 'm10': 21}
-    for map_name, map in zip(map_names, maps):
+    for map_name, map in zip(map_names, maps_forsel):
         if map_name=='dust':
             idx_map = map < 0.03
         elif map_name=='stars':
@@ -94,12 +95,16 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps):
 
 
 def load_maps(NSIDE, map_names):
-    maps = []
+    maps_forsel = []
     # TODO: should be writing these maps with hp.write_map() to a fits file!
+    map_functions = {'stars': maps.get_star_map,
+                     'dust': maps.get_dust_map,
+                     'm10': maps.get_m10_map}
+
     for map_name in map_names:
         fn_map = f'../data/maps/map_{map_name}_NSIDE{NSIDE}.npy'
-        maps.append( np.load(fn_map) )
-    return maps
+        maps_forsel.append( map_functions[map_name](NSIDE=NSIDE, fn_map=fn_map) )
+    return maps_forsel
 
 
 def f_dust(map_d):
@@ -114,14 +119,14 @@ def f_m10(map_m):
     return map_m
 
 
-def construct_X(NPIX, map_names, maps):
+def construct_X(NPIX, map_names, maps_forsel):
     f_dict = {'dust': f_dust,
             'stars': f_stars,
             'm10': f_m10}
 
     constant = np.ones(NPIX)
     X_full = np.atleast_2d(constant)
-    for map_name, map in zip(map_names, maps):
+    for map_name, map in zip(map_names, maps_forsel):
         X_full = np.vstack((X_full, f_dict[map_name](map)))
     return X_full.T
 
