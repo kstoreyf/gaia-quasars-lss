@@ -118,17 +118,29 @@ def get_qso_rand_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_binary):
 
 
 def get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=None):
-    return ~masks.get_qso_mask(NSIDE, mask_names_gaia, Av_max=Av_max)
+    qso_mask_binary_celestial = ~masks.get_qso_mask(NSIDE, mask_names_gaia, Av_max=Av_max)
+    qso_mask_binary_galactic = rotate_celestial_to_galactic(qso_mask_binary_celestial)
+    print(qso_mask_binary_celestial)
+    print(qso_mask_binary_galactic.astype(bool))
+    return qso_mask_binary_galactic.astype(bool)
 
 
 def get_qso_overdensity_map(NSIDE, fn_gaia, mask_q_binary):
     print("Getting QSO overdensity map")
     tab_gaia = utils.load_table(fn_gaia)
-    map_nqso_gaia, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+    map_nqso_gaia_celestial, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+    map_nqso_gaia_galactic = rotate_celestial_to_galactic(map_nqso_gaia_celestial)
     #only use unmasked areas to compute mean
-    mean = np.mean(map_nqso_gaia[mask_q_binary]) 
-    map_overdensity = map_nqso_gaia/mean - 1
+    mean = np.mean(map_nqso_gaia_galactic[mask_q_binary]) 
+    map_overdensity = map_nqso_gaia_galactic/mean - 1
     return map_overdensity
+
+
+def rotate_celestial_to_galactic(map_celestial):
+    r = hp.Rotator(coord=['C','G'])
+    #map_galactic = r.rotate_map_pixel(map_celestial)
+    map_galactic = r.rotate_map_pixel(map_celestial)
+    return map_galactic
 
 
 def get_qso_mask_prob(NSIDE, mask_binary=None):
@@ -151,9 +163,10 @@ def get_qso_mask_prob(NSIDE, mask_binary=None):
         map_prob = hp.read_map(fn_prob)
     # combine prob w binary mask
     mask_prob = map_prob
+    mask_prob_galactic = rotate_celestial_to_galactic(mask_prob)
     if mask_binary is not None:
-        mask_prob[mask_binary==False] = 0.0 #nicer way to do this?
-    return mask_prob
+        mask_prob_galactic[mask_binary==False] = 0.0 #nicer way to do this?
+    return mask_prob_galactic
 
 
 def get_mask_indices_keep(NSIDE, ra, dec, mask_names_gaia):
