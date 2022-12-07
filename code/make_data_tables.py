@@ -8,9 +8,8 @@ import utils
 def main():
     overwrite = True
     #gaia_slim(overwrite=overwrite)
-    G_maxs = [19.8, 19.9, 20.1, 20.2, 20.3, 20.4]
-    #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.4]
-    #G_maxs = [20.0]
+    #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
+    G_maxs = [20.0]
     for G_max in G_maxs:
         gaia_subset(G_max=G_max, overwrite=overwrite)
 

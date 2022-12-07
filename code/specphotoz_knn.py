@@ -94,14 +94,18 @@ def main():
     print("Creating results table")
     redshift_spz = np.full(N_gaia, np.nan)
     redshift_spz[idx_withspzs] = knn.Y_hat_apply
+
+    redshift_spz_err = np.full(N_gaia, np.nan)
+    redshift_spz_err[idx_withspzs] = knn.sigma_z
+
     redshift_sdss = np.full(N_gaia, np.nan)
     # not sure why this requires multiple steps but it does!!
     redshift_sdss_withspzs = redshift_sdss[idx_withspzs]
     redshift_sdss_withspzs[index_list_gaiaINsdss] = Y_train
     redshift_sdss[idx_withspzs] = redshift_sdss_withspzs
 
-    data_cols = [tab_gaia['source_id'], redshift_spz, redshift_sdss]
-    col_names = ('source_id', 'redshift_spz', 'redshift_sdss')
+    data_cols = [tab_gaia['source_id'], redshift_spz, redshift_spz_err, redshift_sdss]
+    col_names = ('source_id', 'redshift_spz', 'redshift_spz_err', 'redshift_sdss')
     utils.write_table(fn_spz, data_cols, col_names, overwrite=overwrite)
     print(f"Wrote specphotozs to {fn_spz}!")
 
