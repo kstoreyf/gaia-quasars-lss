@@ -8,34 +8,58 @@ from matplotlib import animation
 from mpl_toolkits import mplot3d
 from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import ticker
 
 from astropy.table import Table
 import astropy.cosmology
 from astropy import units as u
 
+import utils
+
 
 def main():
     #fn_data = '../data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
-    fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-    format_save = 'gif'
-    #N_sub_str = '1e6'
-    N_sub_str = 'all'
-    property_colorby = 'M_absolute_g'
-    fn_save = f'../plots/animations/quasars_pure_N{N_sub_str}_{property_colorby}.{format_save}'
-    #redshift_name = 'redshift_photoz_est'
-    redshift_name = 'redshift_qsoc'
+    #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
+    G_max = 20.4
+    data_tag = f'gaia_G{G_max}'
+    #data_tag = 'sdss'
 
-    s = 0.1
+    if 'gaia' in data_tag:
+        fn_data = f'../data/gaia_G{G_max}.fits'
+        title = 'Gaia QSO catalog ($G<20.4$)'
+        colorbar_label = r'redshift $z$ (spectrophotometric)'
+        redshift_name = 'redshift_spz'
+        property_colorby = redshift_name
+        ra_name, dec_name = 'ra', 'dec'
+    elif 'sdss' in data_tag:
+        fn_data = f'../data/sdss_slim.fits'
+        title = 'SDSS DR16 QSOs'
+        colorbar_label = r'redshift $z$ (spectroscopic)'
+        redshift_name = 'Z'
+        property_colorby = redshift_name
+        ra_name, dec_name = 'RA', 'DEC'
+
+    #format_save = 'gif'
+    format_save = 'mp4'
+    #N_sub_str = '1e3'
+    #N_sub_str = '1e3'
+    N_sub_str = 'all'
+    fn_save = f'../plots/2022-11-02_animations/quasars_{data_tag}_N{N_sub_str}_{property_colorby}.{format_save}'
+    #redshift_name = 'redshift_photoz_est'
+    #redshift_name = 'redshift_qsoc'
+
+    s = 0.12
+    #s = 4
     alpha = 0.09
-    lim = 2500
-    vmin, vmax = -28, -20
+    lim = 3000
+    vmin, vmax = 0, 4.5
 
     print("Reading data:", fn_data)
     data = Table.read(fn_data, format='fits')
 
-    idx_pure = pure_cut(data)
-    data = data[idx_pure]
+    #idx_pure = pure_cut(data)
+    #data = data[idx_pure]
     print("Loaded data with N =", len(data))
 
     # Subsample, if desired
@@ -47,21 +71,25 @@ def main():
     # Convert to cartesian
     print("Converting to cartesian")
     cosmo = astropy.cosmology.Planck15
-    add_xyz(data, cosmo, redshift_name)
+    add_xyz(data, cosmo, redshift_name, ra_name=ra_name, dec_name=dec_name)
 
     # add properties
     print("Adding properties")
     #add_g_rp_color(data)
-    add_M_absolute(data, cosmo, redshift_name)
+    if property_colorby=='M_absolute':
+        add_M_absolute(data, cosmo, redshift_name)
 
+    scmap = utils.shiftedColorMap(matplotlib.cm.plasma_r, start=0.2, midpoint=0.6, stop=1.0, name='plasma_shifted')
     # Create an init function and the animate functions.
     print(f"s = {s}, alpha={alpha}, lim={lim}, vmin={vmin}, vmax={vmax}")
-    anim = make_anim(data, data[property_colorby], s, alpha, lim, vmin, vmax)
+    anim = make_anim(data, data[property_colorby], s, alpha, lim, vmin, vmax,
+                     cmap=scmap, title=title, colorbar_label=colorbar_label)
 
     print("Saving animation to", fn_save)
     s = time.time()
     if format_save=='gif':
-        anim.save(fn_save, writer=PillowWriter(fps=32))
+        anim.save(fn_save, writer=PillowWriter(fps=32)) 
+                  #savefig_kwargs={'bbox_inches': 'tight'})
     elif format_save=='mp4':
         anim.save(fn_save, fps=30, extra_args=['-vcodec', 'libx264'])
     e = time.time()
@@ -70,7 +98,8 @@ def main():
     print("Saved!")
 
 
-def make_anim(data, c, s, alpha, lim, vmin, vmax):
+def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
+              title='', colorbar_label=r'redshift $z$', colorbar=True):
     # Create a figure and a 3D Axes
     fig = plt.figure(figsize=(10,10))
     ax = Axes3D(fig)
@@ -79,13 +108,34 @@ def make_anim(data, c, s, alpha, lim, vmin, vmax):
         #fig = plt.figure(figsize=(10,10))
         #ax = fig.add_subplot(projection='3d')
         scat = ax.scatter(data['x'], data['y'], data['z'], c=c, s=s, alpha=alpha, 
-                          cmap='plasma', vmin=vmin, vmax=vmax)
+                          cmap=cmap, vmin=vmin, vmax=vmax)
         ax.axis('off')
 
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim, lim)
         ax.set_zlim(-lim, lim)
-        ax.set_facecolor('black')
+        #ax.set_facecolor('black')
+        ax.set_facecolor('white')
+        ax.set_title(title, y=1.03, fontsize=28)
+
+        # colorbar
+        if colorbar:
+            norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+            cc = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+            cbaxes = fig.add_axes([1.05, 0.26, 0.02, 0.5]) # side
+            cbar = fig.colorbar(cc, cax=cbaxes, orientation='vertical')
+            #cbaxes = fig.add_axes([0.26, 0.09, 0.5, 0.02]) # bottom
+            #cbar = fig.colorbar(cc, cax=cbaxes, orientation='horizontal')
+            #cbaxes = fig.add_axes([0.8, 0.26, 0.02, 0.5]) 
+            #cbaxes = fig.add_axes([0.5, 0.5, 0.01, 0.43]) 
+            #cbar = fig.colorbar(cc, label=r'redshift $z$', extend='max', fraction=0.033, pad=0.06)
+            cbar.set_label(label=colorbar_label, fontsize=25)
+            cbar.ax.tick_params(labelsize=22)
+            #cbar.ax.set_yticklabels([0,1,2,3,4])
+            tick_locator = ticker.MaxNLocator(nbins=5)
+            cbar.locator = tick_locator
+            cbar.update_ticks()
+
         return fig,
 
     def animate(i):
@@ -98,11 +148,11 @@ def make_anim(data, c, s, alpha, lim, vmin, vmax):
     return anim
 
 
-def add_xyz(data, cosmo, redshift_name):
+def add_xyz(data, cosmo, redshift_name, ra_name='ra', dec_name='dec'):
     dist_photoz = (cosmo.comoving_distance(data[redshift_name])*cosmo.h).value # convert to Mpc/h
     data.add_column(dist_photoz, name='distance')
 
-    x, y, z = radec_to_cartesian(data['distance'], data['ra'], data['dec'])
+    x, y, z = radec_to_cartesian(data['distance'], data[ra_name], data[dec_name])
     data.add_column(x, name='x')
     data.add_column(y, name='y')
     data.add_column(z, name='z')
