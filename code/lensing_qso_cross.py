@@ -18,7 +18,8 @@ def main():
     fn_rand = f'../data/randoms/random_stardustm1064_G{G_max}_10x.fits'
     mask_names_gaia = ['mcs', 'dust']
     Av_max = 0.2
-    tag_Cls = '_prob'
+    #tag_Cls = '_prob'
+    tag_Cls = '_ratio'
     fn_Cls = f'../data/Cls/Cls_G{G_max}_NSIDE{NSIDE}{tag_Cls}.npy'
     
     print(f"Computing lensing-QSO cross-correlation for QSOs with G<{G_max}, maps with NSIDE={NSIDE}")
@@ -27,13 +28,14 @@ def main():
     mask_k = get_planck_lensing_mask(NSIDE)
     map_k = get_planck_lensing_map(NSIDE)
 
-    mask_q_binary = get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=Av_max)
-    mask_q = get_qso_mask_prob(NSIDE, mask_q_binary)
-    map_q = get_qso_overdensity_map(NSIDE, fn_gaia, mask_q_binary)
+    # prob:
+    # mask_q_binary = get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=Av_max)
+    # mask_q = get_qso_mask_prob(NSIDE, mask_q_binary)
+    # map_q = get_qso_overdensity_map(NSIDE, fn_gaia, mask_q_binary)
 
-    # previous:
-    # mask_q = get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=Av_max)
-    # map_q = get_qso_rand_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_q_binary)
+    # ratio:
+    mask_q_binary = get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=Av_max)
+    map_q = get_qso_rand_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_q_binary)
 
     # "We choose a conservative binning scheme with linearly spaced bins of
     # size ∆l = 50 starting from l_min = 25."
@@ -58,11 +60,14 @@ def main():
 #Data from https://pla.esac.esa.int/#cosmology, (cosmology tab then lensing tab)
 #Details: https://wiki.cosmos.esa.int/planck-legacy-archive/index.php/Lensing
 def get_planck_lensing_map(NSIDE, fn_lensing='../data/COM_Lensing_4096_R3.00/MV/dat_klm.fits',
-                           lmax=4096, lmax_smooth=2500):
+                           lmax=4096, lmax_smooth='auto'):
     print("Getting Planck lensing map")
     # Guidance here from: https://zonca.dev/2020/09/planck-spectra-healpy.html
     alm_lensing = hp.read_alm(fn_lensing)
 
+    if lmax_smooth == 'auto':
+        lmax_smooth = 2*NSIDE 
+        
     if lmax_smooth is not None:
         # not sure about this ??
         fl = np.ones(lmax)
@@ -93,35 +98,51 @@ def get_planck_lensing_mask(NSIDE, fn_mask='../data/COM_Lensing_4096_R3.00/mask.
 # but this changes the mean, so maybe should first too, as it says in White paper?
 # tho maybe cleaner way to do with healpy...
 def get_qso_rand_overdensity_map(NSIDE, fn_gaia, fn_rand, mask_binary):
+    print("WARNING: NOT SURE ABOUT COORD SYS HERE YET")
     print("Getting QSO overdensity map")
 
     tab_gaia = utils.load_table(fn_gaia)
     tab_rand = utils.load_table(fn_rand)
 
-    idx_keep_gaia = masks.subsample_mask_indices(tab_gaia['ra'], tab_gaia['dec'], mask_binary)
-    tab_gaia = tab_gaia[idx_keep_gaia]
-    idx_keep_rand = masks.subsample_mask_indices(tab_rand['ra'], tab_rand['dec'], mask_binary)
-    tab_rand = tab_rand[idx_keep_rand]
+    map_nqso_gaia_celestial, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+    map_nqso_rand_celestial, _ = maps.get_map(NSIDE, tab_rand['ra'], tab_rand['dec'], null_val=0)
 
-    map_nqso_gaia, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
-    map_nqso_rand, _ = maps.get_map(NSIDE, tab_rand['ra'], tab_rand['dec'], null_val=0)
+    print(len(map_nqso_gaia_celestial))
+    print(len(map_nqso_rand_celestial))
+    
+    map_nqso_gaia = rotate_celestial_to_galactic(map_nqso_gaia_celestial)
+    map_nqso_rand = rotate_celestial_to_galactic(map_nqso_rand_celestial)
+
+    # map_nqso_gaia = map_nqso_gaia[mask_binary]
+    # map_nqso_rand = map_nqso_rand[mask_binary]
+
+    # idx_keep_gaia = masks.subsample_mask_indices(tab_gaia['ra'], tab_gaia['dec'], mask_binary)
+    # tab_gaia = tab_gaia[idx_keep_gaia]
+    # idx_keep_rand = masks.subsample_mask_indices(tab_rand['ra'], tab_rand['dec'], mask_binary)
+    # tab_rand = tab_rand[idx_keep_rand]
+
 
     #"The weighted random counts in each Healpix pixel then form the “random map”. The overdensity field is defined as the “LRG map” divided by the “random map”, normalized to mean density and mean subtracted." (White 2022)
     #TODO: figure out what to do about these zeros!
     map_ratio = map_nqso_gaia / map_nqso_rand
-    idx_finite = np.isfinite(map_ratio)
+    idx_finite = mask_binary & np.isfinite(map_ratio)
+
+    #map_ratio_unmasked = map_ratio[mask_binary]
+    #idx_finite = np.isfinite(map_ratio_unmasked)
+
+    mean = np.mean(map_ratio[idx_finite]) 
+
     map_overdensity = np.full(map_ratio.shape, hp.UNSEEN)
+    map_overdensity[idx_finite] = map_ratio[idx_finite]/mean - 1
 
     # This is now another overdensity tho, maybe don't want this if have randoms??
-    map_overdensity[idx_finite] = map_ratio[idx_finite]/np.mean(map_ratio[idx_finite]) - 1
+    #map_overdensity[idx_finite] = map_ratio[idx_finite]/np.mean(map_ratio[idx_finite]) - 1
     return map_overdensity
 
 
 def get_qso_mask_binary(NSIDE, mask_names_gaia, Av_max=None):
     qso_mask_binary_celestial = ~masks.get_qso_mask(NSIDE, mask_names_gaia, Av_max=Av_max)
     qso_mask_binary_galactic = rotate_celestial_to_galactic(qso_mask_binary_celestial)
-    print(qso_mask_binary_celestial)
-    print(qso_mask_binary_galactic.astype(bool))
     return qso_mask_binary_galactic.astype(bool)
 
 
