@@ -200,3 +200,18 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
     plt.register_cmap(cmap=newcmap)
 
     return newcmap
+
+
+def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
+
+    tol = 1e-6
+    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
+    N_halos = len(random_ints)
+    int_train = int(frac_train*N_halos)
+    int_test = int((1-frac_test)*N_halos)
+
+    idx_train = np.where(random_ints < int_train)[0]
+    idx_test = np.where(random_ints >= int_test)[0]
+    idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
+
+    return idx_train, idx_val, idx_test
