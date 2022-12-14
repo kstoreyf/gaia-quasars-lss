@@ -5,6 +5,7 @@ import pandas as pd
 import healpy as hp
 from astropy import units as u
 from astropy.table import Table
+from astropy.coordinates import SkyCoord, match_coordinates_sky
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -54,12 +55,48 @@ def add_gaia_wise_colors(tab):
     tab.add_column(w1-w2, name='w1_w2')
 
 
+def gw1_w1w2_cuts_index(tab, color_cuts):
+
+    # start with all
+    idx_clean = np.full(len(tab), True)
+
+    for cut in color_cuts:
+        idx_colorcut = gw1_w1w2_cut_index(tab['g_w1'], tab['w1_w2'], cut)
+        idx_clean = idx_clean & idx_colorcut
+    
+    print(f'Fraction that make cuts: {np.sum(idx_clean)/len(idx_clean):.3f}')
+    return idx_clean
+
+def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
+    return cut[0] * g_w1 + cut[1] * w1_w2 > cut[2]
+
+
+# gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
+def cross_match(ra1, dec1, ra2, dec2, separation):
+    coords1 = SkyCoord(ra=ra1, dec=dec1, frame='icrs')    
+    coords2 = SkyCoord(ra=ra2, dec=dec2, frame='icrs') 
+    index_list_all, sep2d, _ = match_coordinates_sky(coords1, coords2, nthneighbor=1)
+    idx_close = sep2d < separation
+    # The indices that match_coordinates produces are into coord2; get only the ones with close match
+    index_list_2in1 = index_list_all[idx_close]
+    # index_list_all has shape coords1, so the locations of the close matches are where in coords1
+    # the matches are
+    index_list_1in2 = np.where(idx_close)[0]
+    return index_list_1in2, index_list_2in1
+
+
 def add_spzs(tab_gaia, fn_spz='../data/redshifts_spz_kNN.fits'):
     tab_spz = Table.read(fn_spz, format='fits')
     assert np.allclose(tab_gaia['source_id'], tab_spz['source_id']), "Source IDs don't line up! They should by construction"
     tab_gaia.add_column(tab_spz['redshift_spz'], name='redshift_spz')
     tab_gaia.add_column(tab_spz['redshift_sdss'], name='redshift_sdss')
     
+
+def redshift_cut_index(tab, z_min, redshift_key):
+    #Include only SDSS quasars with z>z_min (this removes zeros and nans, and maybe a few others)
+    idx_zgood = tab[redshift_key] > z_min
+    return idx_zgood
+
 
 def load_table(fn_fits):
     return Table.read(fn_fits, format='fits')

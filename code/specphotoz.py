@@ -21,161 +21,73 @@ def main():
 
     G_max = 20.5
     rng = default_rng()
+    redshift_estimator_name = 'kNN'
 
-    redshift_estimator_name = 'ANN'
     redshift_estimator_dict = {'kNN': RedshiftEstimatorkNN,
                                'ANN': RedshiftEstimatorANN
                                }
     redshift_estimator_kwargs_dict = {'kNN': {'K': 11},
                                       'ANN': {'rng': rng}
                                       }
-
     redshift_estimator_class = redshift_estimator_dict[redshift_estimator_name]                        
     redshift_estimator_kwargs = redshift_estimator_kwargs_dict[redshift_estimator_name]
 
     # save name
-    save_tag = '_lr0.005'
+    #save_tag = '_lr0.005'
+    save_tag = '_scaledNOqsoc'
     fn_spz = f'../data/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag}.fits'
     overwrite = True
 
     # Load data
     print("Loading data")
-    fn_gaia = '../data/gaia_slim.fits'
+    fn_gaia = '../data/gaia_clean.fits'
     tab_gaia = utils.load_table(fn_gaia)
     # TEST ONLY W SMALL AMOUNT
     #tab_gaia = tab_gaia[np.random.randint(0, len(tab_gaia), size=10000)]
     N_gaia = len(tab_gaia)
-    print(f"Number of Gaia QSO candidates: {N_gaia}")
+    print(f"N of clean gaia catalog: {N_gaia}")
 
-    fn_sdss = '../data/sdss_slim.fits'
-    tab_sdss = utils.load_table(fn_sdss)
-
-    z_min = 0.01 #magic #hyperparameter
-    redshift_key = 'Z'
-    idx_zgood = redshift_cut_index(tab_sdss, z_min, redshift_key)
-    tab_sdss = tab_sdss[idx_zgood]
-    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
-
-    print("Constructing feature matrix")
-    # Get reddening
-    if 'ebv' not in tab_gaia.columns:
-        utils.add_ebv(tab_gaia)
-
-    # color cuts
-    gaia_wise_colors = ['g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
-    if np.any(np.in1d(gaia_wise_colors, tab_gaia.columns)):
-        utils.add_gaia_wise_colors(tab_gaia)
-    color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
-    idx_clean_gaia = cuts_index(tab_gaia, G_max, color_cuts) 
-    print("N_clean:", np.sum(idx_clean_gaia))
+    # Make Gmax cut, because will be more robust that way if we cut first
+    i_makeGcut = tab_gaia['phot_g_mean_mag'] < G_max
+    tab_gaia = tab_gaia[i_makeGcut]
+    print(f"N after G_max cut of G<{G_max}:", len(tab_gaia))
 
     # Construct full feature matrix
+    print("Constructing feature matrix")
     feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
     X_gaia, idx_goodfeat = construct_X(tab_gaia, feature_keys)
-    # these indexes are the ones we will estimate SPZs for
-    idx_withspzs = idx_clean_gaia & idx_goodfeat
-    print(len(tab_gaia), len(idx_clean_gaia), len(idx_goodfeat), len(idx_withspzs))
+    # these indexes are the ones in our final sample
+    X_gaia = X_gaia[idx_goodfeat]
+    tab_gaia = tab_gaia[idx_goodfeat]
+    print("N after throwing out bad features:", len(tab_gaia))
+    i_has_sdss_redshift = np.isfinite(tab_gaia['sdss_Z'])
+    print("N with SDSS redshifts:", np.sum(i_has_sdss_redshift))
 
-    X_gaia_withspzs = X_gaia[idx_withspzs]
-
-    # make table with just the ones we will estimate SPZs for
-    tab_gaia_withspzs = tab_gaia[idx_withspzs]
-
-    # Cross-match
-    print("Performing cross-match")
-    separation = 1*u.arcsec
-    index_list_gaiaINsdss, index_list_sdssINgaia = cross_match(tab_gaia_withspzs, 
-                                           tab_gaia_withspzs['ra'], tab_gaia_withspzs['dec'],
-                                           tab_sdss, tab_sdss['RA']*u.degree, tab_sdss['DEC']*u.degree,
-                                           separation=separation)
-
-    # Split training (where have redshifts) and not
-    X_train = X_gaia_withspzs[index_list_gaiaINsdss]
-    # Apply to all, including those with SDSS redshifts
-    # (TODO: is this correct??)
-    X_apply = X_gaia_withspzs
-
-    Y_train = tab_sdss[index_list_sdssINgaia]['Z']
+    # Split training (where have SDSS redshifts) and not
+    X_train = X_gaia[i_has_sdss_redshift]
+    # Apply to all, including those with SDSS redshifts (for consistency)
+    X_apply = X_gaia
+    Y_train = tab_gaia[i_has_sdss_redshift]['sdss_Z']
     print(f"X_train: {X_train.shape}, Y_train: {Y_train.shape}, X_apply: {X_apply.shape}")
     assert X_train.shape[0]==Y_train.shape[0], "X and Y must have same length!"
 
-    # Run redshhift estimation
+    # Run redshift estimation
     print("Running redshift estimation")
-
     # cross_validate(redshift_estimator_class, 
     #                X_train, Y_train,
     #                redshift_estimator_kwargs, rng)
-
-    #print(breakitup)
-
     redshift_estimator = redshift_estimator_class(X_train, Y_train, X_apply, **redshift_estimator_kwargs)
-    
     redshift_estimator.train()
     redshift_estimator.apply()
 
-    # create new table and save
-    print("Creating results table")
-    redshift_spz = np.full(N_gaia, np.nan)
-    redshift_spz[idx_withspzs] = redshift_estimator.Y_hat_apply
-
-    redshift_spz_err = np.full(N_gaia, np.nan)
-    redshift_spz_err[idx_withspzs] = redshift_estimator.sigma_z
-
-    redshift_sdss = np.full(N_gaia, np.nan)
-    # not sure why this requires multiple steps but it does!!
-    redshift_sdss_withspzs = redshift_sdss[idx_withspzs]
-    redshift_sdss_withspzs[index_list_gaiaINsdss] = Y_train
-    redshift_sdss[idx_withspzs] = redshift_sdss_withspzs
-
-    data_cols = [tab_gaia['source_id'], redshift_spz, redshift_spz_err, redshift_sdss]
-    col_names = ('source_id', 'redshift_spz', 'redshift_spz_err', 'redshift_sdss')
-    utils.write_table(fn_spz, data_cols, col_names, overwrite=overwrite)
+    # Save results
+    print("Save results")
+    columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z']
+    tab_gaia.keep_columns(columns_to_keep)
+    tab_gaia['redshift_spz'] = redshift_estimator.Y_hat_apply
+    tab_gaia['redshift_spz_err'] = redshift_estimator.sigma_z
+    tab_gaia.write(fn_spz, overwrite=overwrite)
     print(f"Wrote specphotozs to {fn_spz}!")
-
-
-def cuts_index(tab, G_max, color_cuts):
-
-    # start with all
-    idx_clean = np.full(len(tab), True)
-
-    # g magnitude cut
-    idx_gmagcut = (tab['phot_g_mean_mag'] < G_max)
-    idx_clean = idx_clean & idx_gmagcut
-
-    # color cuts
-    for cut in color_cuts:
-        idx_colorcut = gw1_w1w2_cut_index(tab['g_w1'], tab['w1_w2'], cut)
-        idx_clean = idx_clean & idx_colorcut
-    
-    print(f'Fraction of Gaia-SDSS cross-matched quasars that make cuts: {np.sum(idx_clean)/len(idx_clean):.3f}')
-    return idx_clean
-
-
-
-
-def redshift_cut_index(tab, z_min, redshift_key):
-    #Include only SDSS quasars with z>z_min (this removes zeros and nans, and maybe a few others)
-    idx_zgood = tab[redshift_key] > z_min
-    return idx_zgood
-
-
-# gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
-def cross_match(tab1, ra1, dec1,
-                tab2, ra2, dec2, separation):
-    coords1 = SkyCoord(ra=ra1, dec=dec1, frame='icrs')    
-    coords2 = SkyCoord(ra=ra2, dec=dec2, frame='icrs') 
-    index_list_all, sep2d, _ = astropy.coordinates.match_coordinates_sky(coords1, coords2, nthneighbor=1)
-    idx_close = sep2d < separation
-    # The indices that match_coordinates produces are into coord2; get only the ones with close match
-    index_list_2in1 = index_list_all[idx_close]
-    # index_list_all has shape coords1, so the locations of the close matches are where in coords1
-    # the matches are
-    index_list_1in2 = np.where(idx_close)[0]
-    return index_list_1in2, index_list_2in1
-
-
-def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
-    return cut[0] * g_w1 + cut[1] * w1_w2 > cut[2]
 
 
 def construct_X(tab, feature_keys):
@@ -269,14 +181,20 @@ class RedshiftEstimatorkNN(RedshiftEstimator):
     def __init__(self, *args, K=11, **kwargs):
         super().__init__(*args, **kwargs)
         self.K = K
-        self.scale()
+        self.scale_x()
 
 
-    def scale(self):
-        self.scaler = StandardScaler() # TODO revisit !! 
-        self.scaler.fit(self.X_train)
-        self.X_train_scaled = self.scaler.transform(self.X_train)
-        self.X_apply_scaled = self.scaler.transform(self.X_apply)
+    def scale_x(self):
+        # mean and stdev
+        #self.scaler_x = StandardScaler() # TODO revisit !! 
+        #does nothing while keeping notation consistent
+        #self.scaler_x = StandardScaler(with_mean=False, with_std=False) 
+        # scales all besides 1st column, QSOC
+        N_feat = self.X_train.shape[1]
+        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
+        self.scaler_x.fit(self.X_train)
+        self.X_train_scaled = self.scaler_x.transform(self.X_train)
+        self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
 
 
     def train(self):
