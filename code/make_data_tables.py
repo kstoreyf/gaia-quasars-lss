@@ -7,17 +7,17 @@ import utils
 
 
 def main():
-    overwrite = True
-    #gaia_slim(overwrite=overwrite)
+    overwrite = False
+    gaia_slim(overwrite=overwrite)
 
     #gaia_slim_xsdss(overwrite=overwrite)
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    G_maxs = [20.0]
-    fn_spz='../data/redshifts_spz_kNN_G20.5.fits'
-    for G_max in G_maxs:
-        merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
+    # G_maxs = [20.0]
+    # fn_spz='../data/redshifts_spz_kNN_G20.5.fits'
+    # for G_max in G_maxs:
+    #     merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
 
 
 def gaia_slim(overwrite=False):
@@ -31,6 +31,7 @@ def gaia_slim(overwrite=False):
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
     print(tab_gaia.columns)
+    print(sdfkjsdf)
 
     # Create and save
     columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
