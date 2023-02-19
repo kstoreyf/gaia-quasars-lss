@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from numpy.random import default_rng
 
 import astropy
@@ -19,24 +20,53 @@ import utils
 
 def main():
 
+    # How many GPUs are there?
+    print(torch.cuda.device_count())
+    print(torch.cuda.is_available())
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
+
     G_max = 20.5
     rng = default_rng()
+    #redshift_estimator_name = 'kNN'
+    #mode = '2step'
+    #mode = 'regression'
+    mode = 'zbins'
+    redshift_estimator_name_classifier = 'ANN2class'
+    #redshift_estimator_name = 'ANN'
     redshift_estimator_name = 'kNN'
+    learning_rate_classifier = 0.005
+    learning_rate = 0.005
+    overwrite_classifier = True
+    overwrite_model = True
+    overwrite_table = True
+    #fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_kNN_G20.5_valid.fits'
+    #fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_kNN_G20.5_wspzqsoc.fits'
+    fn_prev_estimate = None
+
+    # save names
+    save_tag_model = '_zbins'
+    #save_tag_model = '_withkNNspz'
+    #save_tag_model = '_2step_trainonbad'
+    save_tag_classifier = f'_zbins_lr{learning_rate_classifier}_nog'
+    #save_tag_classifier = f'_lr{learning_rate_classifier}'
+    #save_tag = f'_lr{learning_rate}_valid'
+    #save_tag = '_scaledNOqsoc'
 
     redshift_estimator_dict = {'kNN': RedshiftEstimatorkNN,
-                               'ANN': RedshiftEstimatorANN
+                               'ANN': RedshiftEstimatorANN, 
+                               'ANN2class': RedshiftEstimatorANN2class
                                }
     redshift_estimator_kwargs_dict = {'kNN': {'K': 11},
-                                      'ANN': {'rng': rng}
+                                      'ANN': {'rng': rng, 'learning_rate': learning_rate},
+                                      'ANN2class': {'rng': rng, 'learning_rate': learning_rate_classifier}
                                       }
     redshift_estimator_class = redshift_estimator_dict[redshift_estimator_name]                        
     redshift_estimator_kwargs = redshift_estimator_kwargs_dict[redshift_estimator_name]
 
-    # save name
-    #save_tag = '_lr0.005'
-    save_tag = '_scaledNOqsoc'
-    fn_spz = f'../data/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag}.fits'
-    overwrite = True
+    fn_model = f'../data/redshift_models/model_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}.fits'
+    fn_model_classifier = f'../data/redshift_models/model_classifier_spz_{redshift_estimator_name_classifier}_G{G_max}{save_tag_classifier}.fits'
+    fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}{save_tag_classifier}.fits'
 
     # Load data
     print("Loading data")
@@ -55,19 +85,82 @@ def main():
     # Construct full feature matrix
     print("Constructing feature matrix")
     feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
-    X_gaia, idx_goodfeat = construct_X(tab_gaia, feature_keys)
-    # these indexes are the ones in our final sample
-    X_gaia = X_gaia[idx_goodfeat]
-    tab_gaia = tab_gaia[idx_goodfeat]
+    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
+    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
+    #                'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
+    if fn_prev_estimate is not None:
+        print(f"Including SPZ from prev estimate, {fn_prev_estimate}")
+        tab_spz_prev = Table.read(fn_prev_estimate, format='fits')
+        tab_spz_prev.keep_columns(['source_id', 'redshift_spzqsoc'])
+        tab_gaia = astropy.table.join(tab_gaia, tab_spz_prev, keys='source_id', join_type='left')
+        feature_keys.append('redshift_spzqsoc')
+
+    X_gaia = construct_X(tab_gaia, feature_keys)
+    print('prev spzs')
+    print(X_gaia[:,-1])
+    Y_qsoc = tab_gaia['redshift_qsoc']
     print("N after throwing out bad features:", len(tab_gaia))
     i_has_sdss_redshift = np.isfinite(tab_gaia['sdss_Z'])
     print("N with SDSS redshifts:", np.sum(i_has_sdss_redshift))
 
     # Split training (where have SDSS redshifts) and not
-    X_train = X_gaia[i_has_sdss_redshift]
+    X_labeled = X_gaia[i_has_sdss_redshift]
+    Y_labeled = tab_gaia[i_has_sdss_redshift]['sdss_Z']
+    Y_qsoc_labeled = Y_qsoc[i_has_sdss_redshift]
+    N_labeled = X_labeled.shape[0]
+
+    if mode=='2step':
+        dz_thresh = 0.1
+        dz = np.abs(np.array(Y_qsoc_labeled) - np.array(Y_labeled))/(1 + np.array(Y_labeled))
+        # this will be 1 where dz is above the threshold (correct z), 0 if incorrect
+        i_correctqsoc = dz<dz_thresh
+        C_class = np.full(len(dz), 0.0)
+        C_class[i_correctqsoc] = 1.0
+        print(f"Fraction QSOC within |dz|<{dz_thresh} [already correct]: {np.sum(i_correctqsoc)/len(i_correctqsoc):.3f}")
+        print(f"Fraction QSOC with |dz|>{dz_thresh} [incorrect]: {np.sum(~i_correctqsoc)/len(i_correctqsoc):.3f}")
+
+    elif mode=='zbins':
+        z_thresh = 3.0
+        i_highz = Y_labeled > z_thresh
+        C_class = np.full(len(i_highz), 0.0)
+        C_class[i_highz] = 1.0
+        print(f"Fraction with z>{z_thresh}: {np.sum(i_highz)/len(i_highz):.3f}")
+
+    # this is essentially shuffling an array of 1-N
+    #random_ints = rng.choice(range(N_labeled), size=N_labeled, replace=False)
+    rand_ints_labeled = tab_gaia['rand_ints_clean'][i_has_sdss_redshift]
+    # N_tot=N_gaia because the numbers go up to all the ones in the clean catalog
+    idx_train, idx_valid, idx_test = utils.split_train_val_test(rand_ints_labeled, N_tot=N_gaia)
+    chunk_spz = np.empty(N_labeled, dtype='S5')
+    chunk_spz[idx_train] = 'train'
+    chunk_spz[idx_valid] = 'valid'
+    chunk_spz[idx_test] = 'test'
+
+    # split into actual training and validation subset
+    #int_divider = int(frac_test*N_gaia)
+    # test are ones that are not used to validate the model but have labels to do final check
+    # idxs_test = np.where(rand_ints_labeled < int_divider)[0]
+    # idxs_train = np.where(rand_ints_labeled >= int_divider)[0]
+    
+    print(f"N_train: {len(idx_train)} ({len(idx_train)/N_labeled:.3f})") 
+    print(f"N_valid: {len(idx_valid)} ({len(idx_valid)/N_labeled:.3f})") 
+    print(f"N_test: {len(idx_test)} ({len(idx_test)/N_labeled:.3f})") 
+
+    X_train = X_labeled[idx_train]
+    X_valid = X_labeled[idx_valid]
+    X_test = X_labeled[idx_test]
+
+    Y_train = Y_labeled[idx_train]
+    Y_valid = Y_labeled[idx_valid]
+    Y_test = Y_labeled[idx_test]
+
+    if mode=='2step' or mode=='zbins':
+        C_train = C_class[idx_train]
+        C_valid = C_class[idx_valid]
+        C_test = C_class[idx_test]
+
     # Apply to all, including those with SDSS redshifts (for consistency)
     X_apply = X_gaia
-    Y_train = tab_gaia[i_has_sdss_redshift]['sdss_Z']
     print(f"X_train: {X_train.shape}, Y_train: {Y_train.shape}, X_apply: {X_apply.shape}")
     assert X_train.shape[0]==Y_train.shape[0], "X and Y must have same length!"
 
@@ -76,17 +169,256 @@ def main():
     # cross_validate(redshift_estimator_class, 
     #                X_train, Y_train,
     #                redshift_estimator_kwargs, rng)
-    redshift_estimator = redshift_estimator_class(X_train, Y_train, X_apply, **redshift_estimator_kwargs)
-    redshift_estimator.train()
-    redshift_estimator.apply()
+    if mode=='2step':            
+
+        redshift_estimator_class_classifier = \
+                redshift_estimator_dict[redshift_estimator_name_classifier]                        
+        redshift_estimator_kwargs_classifier = redshift_estimator_kwargs_dict[redshift_estimator_name_classifier]
+
+        # just X_test for now, but will want X_apply
+        if os.path.exists(fn_model_classifier) and not overwrite_classifier:
+            print(f"Classifier {fn_model_classifier} already exists and overwrite_classifier={overwrite_classifier}")
+            print("So load it in!")
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_apply=X_test, 
+                                                                                train_mode=False, test_mode=True)
+            redshift_estimator_classifier.load_model(fn_model_classifier)
+        else:           
+            print(f"Training classifier {fn_model_classifier} (overwrite_classifier={overwrite_classifier})")                                                             
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_train, C_train, X_valid, C_valid, X_test,
+                                                                                **redshift_estimator_kwargs_classifier)
+            redshift_estimator_classifier.train()
+            # save
+            redshift_estimator_classifier.save_model(fn_model_classifier)
+
+        # Apply classifier
+        redshift_estimator_classifier.apply()  
+
+        # Get classifications
+        #C_pred_test = redshift_estimator_classifier.Y_hat_apply[i_has_sdss_redshift][idx_test]
+        prob_pred_test = redshift_estimator_classifier.Y_hat_apply
+        class_thresh = 0.5
+        i_pred_test_correctqsoc = prob_pred_test > class_thresh
+        C_pred_test = np.full(len(prob_pred_test), 0.0)
+        C_pred_test[i_pred_test_correctqsoc] = 1.0
+        print(f"Fraction accurate predicted labels, test set: {np.sum(C_pred_test==C_test)/len(C_test):.3f}")
+        print(f"Fraction of test QSOCs that are predicted to be correct: {np.sum(i_pred_test_correctqsoc)/len(i_pred_test_correctqsoc):.3f}")
+
+        # Now train on only incorrect ones (which we know for sure)
+        # need indices in this form to combine with i_correctqsoc
+        i_train = np.full(len(X_labeled), False)
+        i_train[idx_train] = True
+        i_valid = np.full(len(X_labeled), False)
+        i_valid[idx_valid] = True
+        i_test = np.full(len(X_labeled), False)
+        i_test[idx_test] = True
+
+        X_train_incorrectqsoc = X_labeled[i_train & ~i_correctqsoc]
+        Y_train_incorrectqsoc = Y_labeled[i_train & ~i_correctqsoc]
+
+        X_valid_incorrectqsoc = X_labeled[i_valid & ~i_correctqsoc]
+        Y_valid_incorrectqsoc = Y_labeled[i_valid & ~i_correctqsoc]
+        print(X_train_incorrectqsoc.shape, X_valid_incorrectqsoc.shape)
+       
+        # For test sources that classifier says are correct, just leave QSOC redshift! 
+        # For test sources that classifier says are wrong, apply regressor NN
+        # test for now, but should be apply
+        # Y_hat_apply = np.empty(X_apply.shape[0])
+        # Y_hat_apply[i_pred_apply_correctqsoc] = Y_qsoc[i_pred_apply_correctqsoc]
+        # X_apply_incorrectqsoc = X_apply[~i_pred_apply_correctqsoc]
+        Y_hat_test = np.empty(X_test.shape[0])
+        Y_hat_test[i_pred_test_correctqsoc] = Y_qsoc_labeled[idx_test][i_pred_test_correctqsoc]
+        X_test_incorrectqsoc = X_test[~i_pred_test_correctqsoc]
+
+        if os.path.exists(fn_model) and not overwrite_model:
+            print(f"Model {fn_model} already exists and overwrite_model={overwrite_model}")
+            print("So load it in!")
+            redshift_estimator = redshift_estimator_class(X_apply=X_test_incorrectqsoc, 
+                                                          train_mode=False, test_mode=True)
+            redshift_estimator.load_model(fn_model)
+        else: 
+            print(f"Training model {fn_model} (overwrite_model={overwrite_model})")        
+            # redshift_estimator = redshift_estimator_class(X_train, Y_train, 
+            #                                             X_valid, Y_valid, 
+            #                                             X_test_incorrectqsoc, **redshift_estimator_kwargs)
+            redshift_estimator = redshift_estimator_class(X_train_incorrectqsoc, Y_train_incorrectqsoc, 
+                                                          X_valid_incorrectqsoc, Y_valid_incorrectqsoc, 
+                                                          X_test_incorrectqsoc, **redshift_estimator_kwargs)
+            redshift_estimator.train()
+            redshift_estimator.save_model(fn_model)
+
+        # Apply
+        redshift_estimator.apply()
+
+        Y_hat_test[~i_pred_test_correctqsoc] = redshift_estimator.Y_hat_apply
+        print(X_test.shape)
+        print(Y_hat_test.shape)
+
+        # Print results
+        dzs = [0.01, 0.1, 0.2, 1.0]
+        for dz in dzs:
+            print(f"Fraction recovered with Dz/(1+z)<{dz}:")
+            Y_test_correctqsoc = Y_labeled[i_test & i_correctqsoc]
+            frac_recovered = utils.get_fraction_recovered(Y_test_correctqsoc, 
+                                                          Y_hat_test[i_correctqsoc[idx_test]], dz)
+            print(f"When QSOC is 'correct' (cheating to use), frac actually correct: {frac_recovered:.3f}")            
+            frac_recovered = utils.get_fraction_recovered(Y_test[i_pred_test_correctqsoc], 
+                                                          Y_hat_test[i_pred_test_correctqsoc], dz)
+            print(f"QSOCs predicted to be correct: {frac_recovered:.3f}")
+            frac_recovered = utils.get_fraction_recovered(Y_test[~i_pred_test_correctqsoc], 
+                                                          Y_hat_test[~i_pred_test_correctqsoc], dz)
+            print(f"QSOCs orig predicted to be incorrect: {frac_recovered:.3f}")
+            frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
+            print(f"SPZ: {frac_recovered:.3f}")
+            frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
+            print(f"QSOC: {frac_recovered_qsoc:.3f}")
+
+    if mode=='zbins':
+
+        redshift_estimator_class_classifier = \
+                redshift_estimator_dict[redshift_estimator_name_classifier]                        
+        redshift_estimator_kwargs_classifier = redshift_estimator_kwargs_dict[redshift_estimator_name_classifier]
+
+        # just X_test for now, but will want X_apply
+        if os.path.exists(fn_model_classifier) and not overwrite_classifier:
+            print(f"Classifier {fn_model_classifier} already exists and overwrite_classifier={overwrite_classifier}")
+            print("So load it in!")
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_apply=X_test, 
+                                                                                train_mode=False, test_mode=True)
+            redshift_estimator_classifier.load_model(fn_model_classifier)
+        else:           
+            print(f"Training classifier {fn_model_classifier} (overwrite_classifier={overwrite_classifier})")                                                             
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_train, C_train, X_valid, C_valid, X_test,
+                                                                                **redshift_estimator_kwargs_classifier)
+            redshift_estimator_classifier.train()
+            # save
+            redshift_estimator_classifier.save_model(fn_model_classifier)
+
+        # Apply classifier
+        redshift_estimator_classifier.apply()  
+
+        # Get classifications
+        #C_pred_test = redshift_estimator_classifier.Y_hat_apply[i_has_sdss_redshift][idx_test]
+        prob_pred_test = redshift_estimator_classifier.Y_hat_apply
+        class_thresh = 0.5
+        i_pred_test_highz = prob_pred_test > class_thresh
+        C_pred_test = np.full(len(prob_pred_test), 0.0)
+        C_pred_test[i_pred_test_highz] = 1.0
+        # will need to update if go to more classes
+        i_pred_test_lowz = ~i_pred_test_highz
+        i_arr_pred_test = [i_pred_test_lowz, i_pred_test_highz]
+        print(f"Fraction accurate predicted labels, test set: {np.sum(C_pred_test==C_test)/len(C_test):.3f}")
+        print(f"Fraction of test that are predicted to be high-z: {np.sum(i_pred_test_highz)/len(i_pred_test_highz):.3f}")
+
+        # Now train on only incorrect ones (which we know for sure)
+        # need indices in this form to combine with i_correctqsoc
+        i_train = np.full(len(X_labeled), False)
+        i_train[idx_train] = True
+        i_valid = np.full(len(X_labeled), False)
+        i_valid[idx_valid] = True
+        i_test = np.full(len(X_labeled), False)
+        i_test[idx_test] = True
+
+        i_lowz = ~i_highz
+        i_arr = [i_lowz, i_highz]
+       
+        Y_hat_test = np.empty(X_test.shape[0])
+        N_knns = 2
+        for n in range(N_knns):
+            i_zsub = i_arr[n]
+            i_zsub_pred_test = i_arr_pred_test[n]
+            X_train_zsub = X_labeled[i_train & i_zsub]
+            Y_train_zsub = Y_labeled[i_train & i_zsub]
+            X_valid_zsub = X_labeled[i_valid & i_zsub]
+            Y_valid_zsub = Y_labeled[i_valid & i_zsub]
+
+            redshift_estimator = redshift_estimator_class(X_train_zsub, Y_train_zsub, 
+                                                          X_valid_zsub, Y_valid_zsub, 
+                                                          X_test[i_zsub_pred_test], 
+                                                          **redshift_estimator_kwargs)
+            redshift_estimator.train()
+            redshift_estimator.apply()
+
+            Y_hat_test[i_zsub_pred_test] = redshift_estimator.Y_hat_apply
+
+        # Print results
+        dzs = [0.01, 0.1, 0.2, 1.0]
+        i_highz_test = Y_test > z_thresh
+        i_lowz_test = ~i_highz_test
+        for dz in dzs:
+            print(f"Fraction recovered with Dz/(1+z)<{dz}:")
+            frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
+            print(f"SPZ: {frac_recovered:.3f}")
+            frac_recovered = utils.get_fraction_recovered(Y_test[i_lowz_test], Y_hat_test[i_lowz_test], dz)
+            print(f"SPZ, low-z: {frac_recovered:.3f}")
+            frac_recovered = utils.get_fraction_recovered(Y_test[i_highz_test], Y_hat_test[i_highz_test], dz)
+            print(f"SPZ, high-z: {frac_recovered:.3f}")
+            frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
+            print(f"QSOC: {frac_recovered_qsoc:.3f}")
+
+    else:
+        if os.path.exists(fn_model) and not overwrite_model:
+            print(f"Model {fn_model} already exists and overwrite_model={overwrite_model}")
+            print("So load it in!")
+            redshift_estimator = redshift_estimator_class(X_apply=X_test, 
+                                                          train_mode=False, test_mode=True)
+            redshift_estimator.load_model(fn_model)
+        else:
+            print(f"Training model {fn_model} (overwrite_model={overwrite_model})")                                                             
+            redshift_estimator = redshift_estimator_class(X_train, Y_train, X_valid, Y_valid, X_test,
+                                                          **redshift_estimator_kwargs)
+            # for now lets just apply to validation set, deal w full thing later
+            #redshift_estimator = redshift_estimator_class(X_train, Y_train, X_test, **redshift_estimator_kwargs)
+            redshift_estimator.train()
+            redshift_estimator.save_model(fn_model)
+
+        # Apply
+        redshift_estimator.apply()
+        #Y_hat_apply = redshift_estimator.Y_hat_apply
+        Y_hat_test = redshift_estimator.Y_hat_apply
+
+        Y_qsoc_test = Y_qsoc_labeled[idx_test]
+
+        # if spz and qsoc agree, assign qsoc    
+        dz_spzqsoc_test = np.abs(np.array(Y_hat_test) - np.array(Y_qsoc_test))/(1 + np.array(Y_qsoc_test))
+        # this will be 1 where dz is above the threshold (correct z), 0 if incorrect
+        dz_thresh = 0.1
+        i_agree_spzqsoc_test = dz_spzqsoc_test<dz_thresh
+        Y_hat_test_spzqsoc = Y_hat_test.copy()
+        Y_hat_test_spzqsoc[i_agree_spzqsoc_test] = Y_qsoc_test[i_agree_spzqsoc_test]
+
+        # Print results
+        dzs = [0.01, 0.1, 0.2, 1.0]
+        for dz in dzs:
+            print(f"Fraction recovered with Dz/(1+z)<{dz}:")
+            frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
+            print(f"SPZ: {frac_recovered:.3f}")
+            frac_recovered_spzqsoc = utils.get_fraction_recovered(Y_test, Y_hat_test_spzqsoc, dz)
+            print(f"SPZ-QSOC: {frac_recovered_spzqsoc:.3f}")
+            frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_test, dz)
+            print(f"QSOC: {frac_recovered_qsoc:.3f}")
+
+    print(slfsfj)
+    # Print results
+    dzs = [0.01, 0.1, 0.2, 1.0]
+    for dz in dzs:
+        print(f"Fraction recovered with Dz/(1+z)<{dz}:")
+        frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_apply[i_has_sdss_redshift][idx_test], dz)
+        print(f"SPZ: {frac_recovered:.3f}")
+        frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
+        print(f"QSOC: {frac_recovered_qsoc:.3f}")
+
+    # # Save model
+    # redshift_estimator.save_model(fn_model)
 
     # Save results
     print("Save results")
-    columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z']
+    columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z', 'rand_ints_clean']
     tab_gaia.keep_columns(columns_to_keep)
-    tab_gaia['redshift_spz'] = redshift_estimator.Y_hat_apply
+    tab_gaia['redshift_spz'] = Y_hat_apply
     tab_gaia['redshift_spz_err'] = redshift_estimator.sigma_z
-    tab_gaia.write(fn_spz, overwrite=overwrite)
+    tab_gaia['chunk_spz'] = np.full(len(tab_gaia), '', dtype='S5')
+    tab_gaia['chunk_spz'][i_has_sdss_redshift] = chunk_spz
+    tab_gaia.write(fn_spz, overwrite_table=overwrite_table)
     print(f"Wrote specphotozs to {fn_spz}!")
 
 
@@ -96,9 +428,11 @@ def construct_X(tab, feature_keys):
     for feature_key in feature_keys:
         X.append(tab[feature_key])
     X = np.array(X).T
-    idx_goodfeat = np.all(np.isfinite(X), axis=1)
+    i_badfeat = np.any(~np.isfinite(X), axis=1)
+    # shouldn't be any bad features because we cleaned up first in make_data_tables.gaia_clean()
+    assert np.sum(i_badfeat)==0, "Some bad feature data in clean catalog!"
     
-    return X, idx_goodfeat
+    return X
 
 
 
@@ -154,11 +488,17 @@ def get_fraction_recovered(Y_true, Y_hat, z_err_close):
 
 class RedshiftEstimator():
 
-    def __init__(self, X_train, Y_train,
-                       X_apply):
+    def __init__(self, X_train=None, Y_train=None, 
+                       X_valid=None, Y_valid=None, 
+                       X_apply=None, 
+                       train_mode=True, test_mode=False):
         self.X_train = X_train
         self.Y_train = Y_train
+        self.X_valid = X_valid
+        self.Y_valid = Y_valid
         self.X_apply = X_apply
+        self.train_mode = train_mode
+        self.test_mode = test_mode
 
 
     def train(self):
@@ -172,6 +512,13 @@ class RedshiftEstimator():
     def apply(self):
         pass
 
+
+    def save_model(self, fn_model):
+        pass
+
+
+    def load_model(self, fn_model):
+        pass
 
 
 
@@ -188,10 +535,10 @@ class RedshiftEstimatorkNN(RedshiftEstimator):
         # mean and stdev
         #self.scaler_x = StandardScaler() # TODO revisit !! 
         #does nothing while keeping notation consistent
-        #self.scaler_x = StandardScaler(with_mean=False, with_std=False) 
+        self.scaler_x = StandardScaler(with_mean=False, with_std=False) 
         # scales all besides 1st column, QSOC
-        N_feat = self.X_train.shape[1]
-        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
+        #N_feat = self.X_train.shape[1]
+        #self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
         self.scaler_x.fit(self.X_train)
         self.X_train_scaled = self.scaler_x.transform(self.X_train)
         self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
@@ -282,28 +629,37 @@ def seed_worker(worker_id):
 
 class RedshiftEstimatorANN(RedshiftEstimator):
     
-    def __init__(self, *args, rng=None, batch_size=512, **kwargs):
+    def __init__(self, *args, rng=None, learning_rate=0.005, batch_size=512, **kwargs):
         self.rng = rng
+        self.learning_rate = learning_rate
         self.batch_size = batch_size
-        assert rng is not None, "Must pass RNG for ANN!"
         super().__init__(*args, **kwargs)
-        self.set_up_data()
+        if self.train_mode:
+            assert rng is not None, "Must pass RNG for ANN!"
+        if self.train_mode:
+            self.set_up_data()
 
     
     def set_up_data(self, frac_valid=0.2):
-        N_train = self.X_train.shape[0]
-        # assign unique ints to the training set
-        random_ints = self.rng.choice(range(N_train), size=N_train, replace=False)
-        # split into actual training and validation subset
-        int_divider = int(frac_valid*N_train)
-        idx_valid = np.where(random_ints < int_divider)[0]
-        idx_train = np.where(random_ints >= int_divider)[0]
-        print("N_train:", len(idx_train), "N_valid:", len(idx_valid))
+        # switched to passing in validation data
+        # N_train = self.X_train.shape[0]
+        # # assign unique ints to the training set
+        # random_ints = self.rng.choice(range(N_train), size=N_train, replace=False)
+        # # split into actual training and validation subset
+        # int_divider = int(frac_valid*N_train)
+        # idx_valid = np.where(random_ints < int_divider)[0]
+        # idx_train = np.where(random_ints >= int_divider)[0]
+        # print("N_train:", len(idx_train), "N_valid:", len(idx_valid))
 
-        self.X_train_sub = self.X_train[idx_train]
-        self.Y_train_sub = self.Y_train[idx_train]
-        self.X_valid = self.X_train[idx_valid]
-        self.Y_valid = self.Y_train[idx_valid]
+        # self.X_train_sub = self.X_train[idx_train]
+        # self.Y_train_sub = self.Y_train[idx_train]
+        # self.X_valid = self.X_train[idx_valid]
+        # self.Y_valid = self.Y_train[idx_valid]
+
+        # TODO just did this for now because abandoning train_sub 
+        # now that have separate valid, but annoying to redo so keeping in case
+        self.X_train_sub = self.X_train
+        self.Y_train_sub = self.Y_train
 
         self.scale_x()
         self.scale_y()
@@ -329,24 +685,22 @@ class RedshiftEstimatorANN(RedshiftEstimator):
         self.scaler_x.fit(self.X_train_sub)
         self.X_train_sub_scaled = self.scaler_x.transform(self.X_train_sub)
         self.X_valid_scaled = self.scaler_x.transform(self.X_valid)
-        self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
-        print(self.X_train_sub[0])
-        print(self.X_train_sub_scaled[0])
+        # print(self.X_train_sub[0])
+        # print(self.X_train_sub_scaled[0])
 
 
     def scale_y(self):
-        
-        
         self.scaler_y = StandardScaler(with_mean=False, with_std=False)
         self.scaler_y.fit(np.atleast_2d(self.Y_train_sub).T)
         self.Y_train_sub_scaled = self.scaler_y.transform(np.atleast_2d(self.Y_train_sub).T)
         self.Y_valid_scaled = self.scaler_y.transform(np.atleast_2d(self.Y_valid).T)
-        print(self.Y_train_sub[:5])
-        print(self.Y_train_sub_scaled[:5])
+        # print(self.Y_train_sub[:5])
+        # print(self.Y_train_sub_scaled[:5])
 
 
     def apply(self):
         print("Applying")
+        self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
         self.Y_hat_apply, self.sigma_z = self.predict(self.X_apply_scaled)
         return self.Y_hat_apply, self.sigma_z
 
@@ -387,7 +741,7 @@ class RedshiftEstimatorANN(RedshiftEstimator):
 
 
 
-    def train(self, hidden_size=512, max_epochs=100, learning_rate=0.005, 
+    def train(self, hidden_size=512, max_epochs=20, 
               fn_model=None, save_at_min_loss=True):
 
         input_size = self.X_train.shape[1] # number of features
@@ -396,7 +750,11 @@ class RedshiftEstimatorANN(RedshiftEstimator):
 
         self.criterion = torch.nn.MSELoss()
         #self.criterion = torch.nn.GaussianNLLLoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        def loss_dz(output, target):
+            loss = torch.mean(torch.divide(torch.abs(output - target), torch.add(target, 1.0)))
+            return loss
+        #self.criterion = loss_dz
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         # Training loop
         self.loss_train = []
@@ -438,6 +796,423 @@ class RedshiftEstimatorANN(RedshiftEstimator):
         print(y_pred.shape)
         sigma = [np.NaN]*len(y_pred) 
         return y_pred, sigma
+
+
+    def save_model(self, fn_model, epoch=None):
+        if epoch is None:
+            epoch = len(self.loss_valid)
+        save_dict = {
+                    'input_size': self.model.input_size,
+                    'hidden_size': self.model.hidden_size,
+                    'output_size': self.model.output_size,
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scaler_x': self.scaler_x,
+                    'scaler_y': self.scaler_y,
+                    'loss_train': self.loss_train,
+                    'loss_valid': self.loss_valid,
+                    'epoch': epoch
+                    }
+        torch.save(save_dict, fn_model)
+
+
+    def load_model(self, fn_model):
+        model_checkpoint = torch.load(fn_model)
+        if 'output_size' in model_checkpoint:
+            output = model_checkpoint['output_size']
+        else:
+            # for back-compatibility
+            output = 1
+        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
+                               output_size=output)
+        self.model.load_state_dict(model_checkpoint['model_state_dict'])
+        self.model.eval()
+        self.scaler_x = model_checkpoint['scaler_x']
+        self.scaler_y = model_checkpoint['scaler_y']
+        if 'loss_train' in model_checkpoint:
+            self.loss_train = model_checkpoint['loss_train']
+        if 'loss_valid' in model_checkpoint:
+            self.loss_valid = model_checkpoint['loss_valid']
+        if 'loss' in model_checkpoint:
+            self.loss = model_checkpoint['loss']        
+        self.epoch = model_checkpoint['epoch']
+
+
+
+class RedshiftEstimatorANN2class(RedshiftEstimator):
+    
+    def __init__(self, *args, rng=None, learning_rate=0.005, batch_size=512, **kwargs):
+        self.rng = rng
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        super().__init__(*args, **kwargs)
+        if self.train_mode:
+            assert rng is not None, "Must pass RNG for ANN!"
+        if self.train_mode:
+            self.set_up_data()
+
+    
+    def set_up_data(self):
+
+        # TODO just did this for now because abandoning train_sub 
+        # now that have separate valid, but annoying to redo so keeping in case
+        self.X_train_sub = self.X_train
+        self.Y_train_sub = self.Y_train
+
+        self.scale_x()
+        print(self.Y_train_sub)
+
+        self.dataset_train = DataSet(self.X_train_sub_scaled, self.Y_train_sub)
+        self.data_loader_train = DataLoader(self.dataset_train, 
+                                    batch_size=self.batch_size, shuffle=True,
+                                    worker_init_fn=seed_worker,
+                                    num_workers=0)
+
+        self.dataset_valid = DataSet(self.X_valid_scaled, self.Y_valid)
+        self.data_loader_valid = DataLoader(self.dataset_valid, 
+                                    batch_size=self.batch_size, shuffle=True,
+                                    worker_init_fn=seed_worker,
+                                    num_workers=0)
+
+
+    def scale_x(self):
+        N_feat = self.X_train.shape[1]
+        # assumes redshift_qsoc is first column
+        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
+        #self.scaler_x = StandardScaler()
+        self.scaler_x.fit(self.X_train_sub)
+        self.X_train_sub_scaled = self.scaler_x.transform(self.X_train_sub)
+        self.X_valid_scaled = self.scaler_x.transform(self.X_valid)
+
+
+    def apply(self):
+        print("Applying")
+        self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
+        self.Y_hat_apply, self.sigma_z = self.predict(self.X_apply_scaled)
+        return self.Y_hat_apply, self.sigma_z
+
+
+    def train_one_epoch(self, epoch_index):
+        running_loss_train = 0.
+        running_loss_valid = 0.
+        losses_train = []
+        for i, data in enumerate(self.data_loader_train):
+            x, y = data
+
+            # Zero your gradients for every batch!
+            self.optimizer.zero_grad()
+            # Make predictions for this batch
+            y_pred = self.model(x.double())
+            # Compute the loss and its gradients
+            # squeeze all in case they are 1-dim
+            loss = self.criterion(y_pred.squeeze(), y.squeeze())
+            loss.backward()
+            # Adjust learning weights
+            self.optimizer.step()
+            # Gather data and report
+            running_loss_train += loss.item()
+            losses_train.append(loss.item())
+
+        self.model.eval()
+        for i, data_val in enumerate(self.data_loader_valid):
+            x, y = data_val
+            y_pred = self.model(x.double())
+            loss = self.criterion(y_pred.squeeze(), y.squeeze())
+            running_loss_valid += loss.item()
+
+        #print(np.mean(losses_train), np.min(losses_train), np.max(losses_train))
+        last_loss_train = running_loss_train / len(self.data_loader_train)
+        last_loss_valid = running_loss_valid / len(self.data_loader_valid)
+        print(f"Training epoch {epoch_index}, training loss {last_loss_train:.3f}, validation loss {last_loss_valid:.3f}")
+        return last_loss_train, last_loss_valid
+
+
+
+    def train(self, hidden_size=512, max_epochs=15, 
+              fn_model=None, save_at_min_loss=True):
+
+        input_size = self.X_train.shape[1] # number of features
+        output_size = 1 # 1 redshift estimate
+        self.model = NeuralNet(input_size, hidden_size=hidden_size, output_size=output_size)
+
+        # binary cross entropy including a sigmoid to squeeze output of NN into 0-1
+        # pos_weight: https://discuss.pytorch.org/t/bcewithlogitsloss-calculating-pos-weight/146336/3
+        N_pos = np.sum(self.Y_train)
+        N = len(self.Y_train)
+        pos_weight = N/N_pos - 1 #this is equiv to N_neg/N_pos, as that forum says
+        print('pos_weight:', N_pos, N, pos_weight)
+        self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+
+        # Training loop
+        self.loss_train = []
+        self.loss_valid = []
+        self.model.train()
+        loss_valid_min = np.inf
+        epoch_best = None
+        state_dict_best = None
+        for epoch_index in range(max_epochs):
+            last_loss_train, last_loss_valid = self.train_one_epoch(epoch_index)
+            #print(last_loss, loss_min)
+            if save_at_min_loss and last_loss_valid < loss_valid_min:
+                #print(last_loss, loss_min)
+                state_dict_best = self.model.state_dict()
+                #print(state_dict_best)
+                epoch_best = epoch_index
+                loss_valid_min = last_loss_valid
+            self.loss_train.append(last_loss_train)
+            self.loss_valid.append(last_loss_valid)
+        
+        print('Epoch best:', epoch_best)
+        # revert to state dict for model with lowest loss
+        if save_at_min_loss:
+            self.model.load_state_dict(state_dict_best)
+        # if fn_model is not None:
+        #     # if save_at_min_loss=False, will just save the last epoch 
+        #     self.save_model(fn_model, epoch=epoch_best)
+
+
+    def predict(self, X_input_scaled):
+        self.model.eval()
+        with torch.no_grad():
+            y_pred = self.model(torch.from_numpy(X_input_scaled).double())
+
+        # to get from logits to probabilities
+        # https://sebastianraschka.com/blog/2022/losses-learned-part1.html
+        c_pred = torch.sigmoid(y_pred)
+        c_pred = c_pred.squeeze().numpy()
+        print(c_pred.shape)
+        sigma = [np.NaN]*len(y_pred) 
+        return c_pred, sigma
+
+
+    def save_model(self, fn_model, epoch=None):
+        if epoch is None:
+            epoch = len(self.loss_valid)
+        save_dict = {
+                    'input_size': self.model.input_size,
+                    'hidden_size': self.model.hidden_size,
+                    'output_size': self.model.output_size,
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scaler_x': self.scaler_x,
+                    'loss_train': self.loss_train,
+                    'loss_valid': self.loss_valid,
+                    'epoch': epoch
+                    }
+        torch.save(save_dict, fn_model)
+
+
+    def load_model(self, fn_model):
+        model_checkpoint = torch.load(fn_model)
+        if 'output_size' in model_checkpoint:
+            output = model_checkpoint['output_size']
+        else:
+            # for back-compatibility
+            output = 1
+        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
+                               output_size=output)
+        self.model.load_state_dict(model_checkpoint['model_state_dict'])
+        self.model.eval()
+        self.scaler_x = model_checkpoint['scaler_x']
+        if 'loss_train' in model_checkpoint:
+            self.loss_train = model_checkpoint['loss_train']
+        if 'loss_valid' in model_checkpoint:
+            self.loss_valid = model_checkpoint['loss_valid']
+        if 'loss' in model_checkpoint:
+            self.loss = model_checkpoint['loss']        
+        self.epoch = model_checkpoint['epoch']
+
+
+class RedshiftEstimatorANNmulticlass(RedshiftEstimator):
+    
+    def __init__(self, *args, rng=None, learning_rate=0.005, batch_size=512, 
+                 N_classes=1, **kwargs):
+        self.rng = rng
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.N_classes = N_classes
+        super().__init__(*args, **kwargs)
+        if self.train_mode:
+            assert rng is not None, "Must pass RNG for ANN!"
+        if self.train_mode:
+            self.set_up_data()
+
+    
+    def set_up_data(self):
+
+        # TODO just did this for now because abandoning train_sub 
+        # now that have separate valid, but annoying to redo so keeping in case
+        self.X_train_sub = self.X_train
+        self.Y_train_sub = self.Y_train
+
+        self.scale_x()
+        print(self.Y_train_sub)
+
+        self.dataset_train = DataSet(self.X_train_sub_scaled, self.Y_train_sub)
+        self.data_loader_train = DataLoader(self.dataset_train, 
+                                    batch_size=self.batch_size, shuffle=True,
+                                    worker_init_fn=seed_worker,
+                                    num_workers=0)
+
+        self.dataset_valid = DataSet(self.X_valid_scaled, self.Y_valid)
+        self.data_loader_valid = DataLoader(self.dataset_valid, 
+                                    batch_size=self.batch_size, shuffle=True,
+                                    worker_init_fn=seed_worker,
+                                    num_workers=0)
+
+
+    def scale_x(self):
+        N_feat = self.X_train.shape[1]
+        # assumes redshift_qsoc is first column
+        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
+        #self.scaler_x = StandardScaler()
+        self.scaler_x.fit(self.X_train_sub)
+        self.X_train_sub_scaled = self.scaler_x.transform(self.X_train_sub)
+        self.X_valid_scaled = self.scaler_x.transform(self.X_valid)
+
+
+    def apply(self):
+        print("Applying")
+        self.X_apply_scaled = self.scaler_x.transform(self.X_apply)
+        self.Y_hat_apply_raw, self.sigma_z = self.predict(self.X_apply_scaled)
+        ### _,pred = torch.max(out, dim=1)
+        # the raw data is the probabilities; argmax to get highest-prob zbin
+        self.Y_hat_apply = self.Y_hat_apply_raw.argmax()
+        print(self.Y_hat_apply_raw[0])
+        print(self.Y_hat_apply[0])
+        return self.Y_hat_apply, self.sigma_z
+
+
+    def train_one_epoch(self, epoch_index):
+        running_loss_train = 0.
+        running_loss_valid = 0.
+        losses_train = []
+        for i, data in enumerate(self.data_loader_train):
+            x, y = data
+
+            # Zero your gradients for every batch!
+            self.optimizer.zero_grad()
+            # Make predictions for this batch
+            y_pred = self.model(x.double())
+            # Compute the loss and its gradients
+            # squeeze all in case they are 1-dim
+            loss = self.criterion(y_pred.squeeze(), y.squeeze())
+            loss.backward()
+            # Adjust learning weights
+            self.optimizer.step()
+            # Gather data and report
+            running_loss_train += loss.item()
+            losses_train.append(loss.item())
+
+        self.model.eval()
+        for i, data_val in enumerate(self.data_loader_valid):
+            x, y = data_val
+            y_pred = self.model(x.double())
+            loss = self.criterion(y_pred.squeeze(), y.squeeze())
+            running_loss_valid += loss.item()
+
+        #print(np.mean(losses_train), np.min(losses_train), np.max(losses_train))
+        last_loss_train = running_loss_train / len(self.data_loader_train)
+        last_loss_valid = running_loss_valid / len(self.data_loader_valid)
+        print(f"Training epoch {epoch_index}, training loss {last_loss_train:.3f}, validation loss {last_loss_valid:.3f}")
+        return last_loss_train, last_loss_valid
+
+
+    def train(self, hidden_size=512, max_epochs=20, 
+              fn_model=None, save_at_min_loss=True):
+
+        input_size = self.X_train.shape[1] # number of features
+        output_size = self.N_classes # 1 redshift estimate
+        self.model = NeuralNet(input_size, hidden_size=hidden_size, output_size=output_size)
+
+        # binary cross entropy including a sigmoid to squeeze output of NN into 0-1
+        # pos_weight: https://discuss.pytorch.org/t/bcewithlogitsloss-calculating-pos-weight/146336/3
+        N = len(self.Y_train)
+        weights = [N/np.sum(self.Y_train==i)-1 for i in range(self.N_classes)]
+        print('frac in each class:', [np.sum(self.Y_train==i)/N for i in range(self.N_classes)])
+        print('weights', weights)
+        self.criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor(weights))
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+
+        # Training loop
+        self.loss_train = []
+        self.loss_valid = []
+        self.model.train()
+        loss_valid_min = np.inf
+        epoch_best = None
+        state_dict_best = None
+        for epoch_index in range(max_epochs):
+            last_loss_train, last_loss_valid = self.train_one_epoch(epoch_index)
+            #print(last_loss, loss_min)
+            if save_at_min_loss and last_loss_valid < loss_valid_min:
+                #print(last_loss, loss_min)
+                state_dict_best = self.model.state_dict()
+                #print(state_dict_best)
+                epoch_best = epoch_index
+                loss_valid_min = last_loss_valid
+            self.loss_train.append(last_loss_train)
+            self.loss_valid.append(last_loss_valid)
+        
+        print('Epoch best:', epoch_best)
+        # revert to state dict for model with lowest loss
+        if save_at_min_loss:
+            self.model.load_state_dict(state_dict_best)
+        # if fn_model is not None:
+        #     # if save_at_min_loss=False, will just save the last epoch 
+        #     self.save_model(fn_model, epoch=epoch_best)
+
+
+    def predict(self, X_input_scaled):
+        self.model.eval()
+        with torch.no_grad():
+            y_pred = self.model(torch.from_numpy(X_input_scaled).double())
+
+        # to get from logits to probabilities
+        # https://sebastianraschka.com/blog/2022/losses-learned-part1.html
+        c_pred = torch.sigmoid(y_pred)
+        c_pred = c_pred.squeeze().numpy()
+        print(c_pred.shape)
+        sigma = [np.NaN]*len(y_pred) 
+        return c_pred, sigma
+
+
+    def save_model(self, fn_model, epoch=None):
+        if epoch is None:
+            epoch = len(self.loss_valid)
+        save_dict = {
+                    'input_size': self.model.input_size,
+                    'hidden_size': self.model.hidden_size,
+                    'output_size': self.model.output_size,
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scaler_x': self.scaler_x,
+                    'loss_train': self.loss_train,
+                    'loss_valid': self.loss_valid,
+                    'epoch': epoch
+                    }
+        torch.save(save_dict, fn_model)
+
+
+    def load_model(self, fn_model):
+        model_checkpoint = torch.load(fn_model)
+        if 'output_size' in model_checkpoint:
+            output = model_checkpoint['output_size']
+        else:
+            # for back-compatibility
+            output = 1
+        self.model = NeuralNet(model_checkpoint['input_size'], hidden_size=model_checkpoint['hidden_size'],
+                               output_size=output)
+        self.model.load_state_dict(model_checkpoint['model_state_dict'])
+        self.model.eval()
+        self.scaler_x = model_checkpoint['scaler_x']
+        if 'loss_train' in model_checkpoint:
+            self.loss_train = model_checkpoint['loss_train']
+        if 'loss_valid' in model_checkpoint:
+            self.loss_valid = model_checkpoint['loss_valid']
+        if 'loss' in model_checkpoint:
+            self.loss = model_checkpoint['loss']        
+        self.epoch = model_checkpoint['epoch']
 
 
 class DataSet(Dataset):
