@@ -11,6 +11,7 @@ from scipy.optimize import curve_fit
 
 import utils
 import masks
+import maps
 
 
 def main():
@@ -27,7 +28,7 @@ def main():
     tag_rand = ''
     tag_prob_map = 'stardustm10'
 
-    G_max = 20.0
+    G_max = 20.4
     b_max = 10
     Av_max = 0.2
     gmag_comp = 20.8
@@ -43,7 +44,7 @@ def main():
     if stardens:
         tag_rand += f'_stardens{NSIDE_starmap}'
     if prob_map:
-        tag_rand += f'_{tag_prob_map}{NSIDE_probmap}'
+        tag_rand += f'_{tag_prob_map}_NSIDE{NSIDE_probmap}'
     if mask_plane:
         tag_rand += f'_maskplane{b_max}'
     if mask_mcs:

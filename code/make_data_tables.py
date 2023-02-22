@@ -7,11 +7,12 @@ import utils
 
 
 def main():
-    overwrite = False
-    gaia_slim(overwrite=overwrite)
+    overwrite = True
+    #gaia_slim(overwrite=overwrite)
+    #sdss_slim(overwrite=overwrite)
 
     #gaia_slim_xsdss(overwrite=overwrite)
-    #gaia_clean(overwrite=overwrite)
+    gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
     # G_maxs = [20.0]
@@ -31,7 +32,9 @@ def gaia_slim(overwrite=False):
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
     print(tab_gaia.columns)
-    print(sdfkjsdf)
+
+    rng = np.random.default_rng(seed=42)
+    tab_gaia['rand_ints'] = rng.choice(range(len(tab_gaia)), size=len(tab_gaia), replace=False)
 
     # Create and save
     columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
@@ -40,7 +43,7 @@ def gaia_slim(overwrite=False):
                         'w1mpro', 'w2mpro', 'allwise_oid',
                         'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
                         'parallax', 'parallax_error', 
-                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error']
+                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
     tab_gaia_slim = save_slim_table(tab_gaia, columns_to_keep, fn_gaia_slim, overwrite=overwrite)
 
 
@@ -54,11 +57,26 @@ def gaia_clean(overwrite=False):
     tab_gaia = utils.load_table(fn_gaia)
     print('N_gaia:', len(tab_gaia))
 
+    print("Cutting sources without all necessary data (colors and QSOC redshifts)")
+    # TODO is there a reason i shouldnt be cutting on QSOC redshift here? or having g,bp,rp?
+    col_names_necessary = ['redshift_qsoc', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
+    cols_necessary = []
+    for col_name in col_names_necessary:
+        cols_necessary.append(tab_gaia[col_name])
+        i_neg = tab_gaia[col_name]<0
+    cols_necessary = np.array(cols_necessary).T
+    i_has_necessary = np.all(np.isfinite(cols_necessary), axis=1)
+    print(f"Has necessary color data: {np.sum(i_has_necessary)} ({np.sum(i_has_necessary)/len(i_has_necessary):.3f})")
+    tab_gaia_nec = tab_gaia[i_has_necessary]
+
     print("Making color cuts")
     color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
-    idx_clean_gaia = utils.gw1_w1w2_cuts_index(tab_gaia, color_cuts) 
-    tab_gaia_clean = tab_gaia[idx_clean_gaia]
+    idx_clean_gaia = utils.gw1_w1w2_cuts_index(tab_gaia_nec, color_cuts) 
+    tab_gaia_clean = tab_gaia_nec[idx_clean_gaia]
     print(len(tab_gaia_clean))
+
+    rng = np.random.default_rng(seed=42)
+    tab_gaia_clean['rand_ints_clean'] = rng.choice(range(len(tab_gaia_clean)), size=len(tab_gaia_clean), replace=False)
 
     print("N_clean:", len(tab_gaia_clean))
     tab_gaia_clean.write(fn_gaia_clean, overwrite=overwrite)
@@ -76,7 +94,7 @@ def sdss_slim(overwrite=False):
     tab_sdss = utils.load_table(fn_sdss)
 
     # Create and save
-    columns_to_keep = ['SDSS_NAME', 'OBJID', 'THING_ID', 'RA', 'DEC', 'Z']
+    columns_to_keep = ['SDSS_NAME', 'OBJID', 'THING_ID', 'RA', 'DEC', 'Z', 'ZWARNING']
     save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
 
 
@@ -93,14 +111,21 @@ def gaia_slim_xsdss(overwrite=False):
     print("Load in SDSS data")
     fn_sdss_slim = '../data/sdss_slim.fits'
     tab_sdss = utils.load_table(fn_sdss_slim)
+    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
 
-    # Clean out super low redshift SDSS objects
+
+    # Clean out super low redshift SDSS objects, and ones with bad redshifts
     # TODO: double check if should be doing this
     z_min = 0.01 #magic #hyperparameter
     redshift_key = 'Z'
     idx_zgood = utils.redshift_cut_index(tab_sdss, z_min, redshift_key)
     tab_sdss = tab_sdss[idx_zgood]
-    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
+
+    # https://www.sdss4.org/dr16/algorithms/bitmasks/#ZWARNING
+    idx_zwarn0 = tab_sdss['ZWARNING']==0
+    tab_sdss = tab_sdss[idx_zwarn0]
+    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss)}")
+
 
     # Cross-match
     print("Performing cross-match")

@@ -11,18 +11,22 @@ import maps
 def main():
 
     map_names = ['dust', 'stars', 'm10']
-    NSIDE = 256
+    NSIDE = 64
     #G_max = 19.9
+    #G_max = 20.4
     G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.fits"
+    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_testing.fits"
     overwrite = True
 
     print("Loading data")
-    fn_gaia = f'../data/gaia_G{G_max}.fits' 
+    #fn_gaia = f'../data/gaia_G{G_max}.fits' 
+    fn_gaia = f'../data/gaia_clean.fits' 
     tab_gaia = utils.load_table(fn_gaia)
+    i_makeGcut = tab_gaia['phot_g_mean_mag'] < G_max
+    tab_gaia = tab_gaia[i_makeGcut]
 
     print("Making QSO map")
     maps_forsel = load_maps(NSIDE, map_names)

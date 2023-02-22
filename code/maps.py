@@ -3,11 +3,11 @@ import os
 import pandas as pd
 
 import healpy as hp
-from dustmaps.sfd import SFDQuery
 
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 
+import utils
 
 
 def main():
@@ -201,22 +201,6 @@ def fetch_dustmap(map_name='sfd', data_dir='../data/dustmaps'):
     map_dict[map_name].fetch()
 
 
-def add_ebv(tab):
-    ebv = get_ebv(tab['ra'], tab['dec'])
-    tab.add_column(ebv, name='ebv')
-
-
-def get_ebv(ra, dec):
-    sfd = SFDQuery()
-    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
-    ebv = sfd(coords)
-    return ebv
-
-
-def get_extinction(ra, dec, R=3.1):
-    ebv = get_ebv(ra, dec)
-    return R*ebv
-
 
 def get_dust_map(NSIDE=None, R=None, fn_map=None):
     if fn_map is not None and os.path.exists(fn_map):
@@ -230,7 +214,7 @@ def get_dust_map(NSIDE=None, R=None, fn_map=None):
     # get the positions and Av values at the center of a high-NSIDE map
     print("NPIX for dust map sampling:", NPIX_high)
     ra_high, dec_high = hp.pix2ang(NSIDE_high, np.arange(NPIX_high), lonlat=True)
-    av_high = get_extinction(ra_high*u.deg, dec_high*u.deg, R=R)
+    av_high = utils.get_extinction(ra_high*u.deg, dec_high*u.deg, R=R)
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_avmean, _ = get_map(NSIDE, ra_high, dec_high, quantity=av_high, 
                                          func_name='mean', null_val=np.nan)

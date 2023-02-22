@@ -6,6 +6,7 @@ import healpy as hp
 from astropy import units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky
+from dustmaps.sfd import SFDQuery
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -37,8 +38,23 @@ def jackknife_mean_var(values):
     return mean, var
 
 
-def get_fraction_recovered(Y_true, Y_hat, z_err_close):
-        return np.sum(np.abs(Y_true - Y_hat) < z_err_close) / len(Y_true)
+def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
+
+    tol = 1e-6
+    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
+    N_halos = len(random_ints)
+    int_train = int(frac_train*N_halos)
+    int_test = int((1-frac_test)*N_halos)
+
+    idx_train = np.where(random_ints < int_train)[0]
+    idx_test = np.where(random_ints >= int_test)[0]
+    idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
+
+    return idx_train, idx_val, idx_test
+
+
+def get_fraction_recovered(Y_true, Y_hat, dz):
+        return np.sum(np.abs(Y_hat - Y_true)/(1 + Y_true) < dz) / len(Y_true)
 
 
 def add_gaia_wise_colors(tab):
@@ -123,6 +139,23 @@ def groupby(values, group_indices):
     return values_grouped, list(set(group_indices_sorted))
 
 
+### Extinction
+
+def add_ebv(tab):
+    ebv = get_ebv(tab['ra'], tab['dec'])
+    tab.add_column(ebv, name='ebv')
+
+
+def get_ebv(ra, dec):
+    sfd = SFDQuery()
+    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
+    ebv = sfd(coords)
+    return ebv
+
+
+def get_extinction(ra, dec, R=3.1):
+    ebv = get_ebv(ra, dec)
+    return R*ebv
 
 
 ### Coordinates
@@ -239,13 +272,14 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
     return newcmap
 
 
-def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
+def split_train_val_test(random_ints, N_tot=None, frac_train=0.70, frac_val=0.15, frac_test=0.15):
 
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
-    N_halos = len(random_ints)
-    int_train = int(frac_train*N_halos)
-    int_test = int((1-frac_test)*N_halos)
+    if N_tot is None:
+        N_tot = len(random_ints)
+    int_train = int(frac_train*N_tot)
+    int_test = int((1-frac_test)*N_tot)
 
     idx_train = np.where(random_ints < int_train)[0]
     idx_test = np.where(random_ints >= int_test)[0]
