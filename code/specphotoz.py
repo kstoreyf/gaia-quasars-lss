@@ -31,30 +31,46 @@ def main():
     rng = default_rng()
     #redshift_estimator_name = 'kNN'
     #mode = '2step'
-    #mode = 'regression'
+    mode = 'regression'
     #mode = 'zbins'
-    mode = 'outliers'
-    redshift_estimator_name_classifier = 'ANN2class'
+    #mode = 'combine'
+    redshift_estimator_name_classifier = None
+    #redshift_estimator_name_classifier = 'ANN2class'
     #redshift_estimator_name_classifier = 'SVM'
     #redshift_estimator_name_classifier = 'ANNmulticlass'
-    #redshift_estimator_name = 'ANN'
-    redshift_estimator_name = 'kNN'
-    learning_rate_classifier = 0.005
+    redshift_estimator_name = 'ANN'
+    #redshift_estimator_name = 'kNN'
+    learning_rate_classifier = 0.001
     learning_rate = 0.005
-    overwrite_classifier = True
+    apply_to_all = True
+    overwrite_classifier = False
     overwrite_model = True
     overwrite_table = True
+    save_table = True
     #fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_kNN_G20.5_valid.fits'
-    #fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_kNN_G20.5_wspzqsoc.fits'
-    fn_prev_estimate = None
+    #fn_prev_estimate = None
+    fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_kNN_G20.5_regression.fits'
+    #fn_prev_estimate = None
+    #fn_prev2_estimate = f'../data/redshift_estimates/redshifts_spz_ANN_G20.5_regression_lr0.005_wmags.fits'
+    #fn_prev2_estimate = f'../data/redshift_estimates/redshifts_spz_ANN_G20.5_regression_wkNNspz_andqsoc_wmags.fits'
+    prev_mode = 'add'
+    spz_prev_name = 'redshift_spz'
+    #spz_prev_name = 'redshift_spz'
+    spz_prev2_name = 'redshift_spz'
+    #fn_prev_estimate = None
     N_classes = 3
 
+
     # save names
-    save_tag_model = f'_{mode}_wmags'
-    #save_tag_model = '_zbins'
-    #save_tag_model = '_withkNNspz'
+    #save_tag_model = f'_{mode}_wANNspz'
+    #save_tag_model = f'_{mode}_wkNNspz_andqsoc_wmags'
+    save_tag_model = f'_{mode}_lr{learning_rate}_wkNNspz'
+    #save_tag_model = '_notused'
+    save_tag_classifier = '_notused'
+    #save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_kNN_ANNwkwmags_wmags_goodorbetter'
+    #save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_kNN_ANNwkwmags_wmags'
     #save_tag_model = '_2step_trainonbad'
-    save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_wmags'#_dz0.2line'
+    #save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_wspzprevs_goodorbetter_wmags'#_dz0.2line'
     #save_tag_classifier = f'_zbins{N_classes}nonuniform_lr{learning_rate_classifier}'
     #save_tag_classifier = f'_lr{learning_rate_classifier}'
     #save_tag = f'_lr{learning_rate}_valid'
@@ -78,7 +94,14 @@ def main():
 
     fn_model = f'../data/redshift_models/model_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}.fits'
     fn_model_classifier = f'../data/redshift_models/model_classifier_spz_{redshift_estimator_name_classifier}_G{G_max}{save_tag_classifier}.fits'
-    fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}{save_tag_classifier}.fits'
+    if mode=='2step' or mode=='combine' or mode=='outliers':
+        fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}{save_tag_classifier}.fits'
+    elif mode=='regression':
+        fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name}_G{G_max}{save_tag_model}.fits'
+    elif mode=='combine':
+        fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name_classifier}_G{G_max}{save_tag_classifier}.fits'
+    else:
+        raise ValueError('Dunno what to name SPZ file!')
 
     # Load data
     print("Loading data")
@@ -96,20 +119,52 @@ def main():
 
     # Construct full feature matrix
     print("Constructing feature matrix")
-    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
+    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
     #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
-    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
-                    'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
-    if fn_prev_estimate is not None:
-        print(f"Including SPZ from prev estimate, {fn_prev_estimate}")
+    #feature_keys = ['ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
+    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
+    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
+    #               'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
+    if fn_prev_estimate is not None and mode!='combine':
         tab_spz_prev = Table.read(fn_prev_estimate, format='fits')
-        tab_spz_prev.keep_columns(['source_id', 'redshift_spzqsoc'])
+        print(tab_spz_prev.columns)
+        tab_spz_prev.keep_columns(['source_id', spz_prev_name])
         tab_gaia = astropy.table.join(tab_gaia, tab_spz_prev, keys='source_id', join_type='left')
-        feature_keys.append('redshift_spzqsoc')
+        if prev_mode=='replace_qsoc':
+            print(f"Replacing QSOC with SPZ from prev estimate, {fn_prev_estimate}")
+            i_qsoc = np.where(feature_keys=='redshift_qsoc')[0]
+            assert len(i_qsoc)>1, "No QSOC redshift to replace?"
+            feature_keys[i_qsoc[0]] = spz_prev_name    
+        elif prev_mode=='add':
+            print(f"Adding SPZ from prev estimate to features {fn_prev_estimate}")
+            feature_keys.append(spz_prev_name)
 
+    if redshift_estimator_name=='ANN':
+        redshift_estimator_kwargs['feature_keys'] = feature_keys
+
+    # must do this here before any indexing bc the joining shuffles the table!
+    if mode=='combine':
+        tab_spz_prev = Table.read(fn_prev_estimate, format='fits')
+        tab_spz_prev.keep_columns(['source_id', spz_prev_name])
+        tab_gaia = astropy.table.join(tab_gaia, tab_spz_prev, keys='source_id', join_type='left')
+        spz_prev_name_new = spz_prev_name+'_prev1'
+        tab_gaia.rename_column(spz_prev_name, spz_prev_name_new)
+        spz_prev_name = spz_prev_name_new
+
+        tab_spz_prev2 = Table.read(fn_prev2_estimate, format='fits')
+        tab_spz_prev2.keep_columns(['source_id', spz_prev2_name])
+        tab_gaia = astropy.table.join(tab_gaia, tab_spz_prev2, keys='source_id', join_type='left')
+        spz_prev2_name_new = spz_prev2_name+'_prev2'
+        tab_gaia.rename_column(spz_prev2_name, spz_prev2_name_new)
+        spz_prev2_name = spz_prev2_name_new
+
+        # also adding these to feautures!
+        feature_keys.extend([spz_prev_name, spz_prev2_name])
+
+    print('feature keys:', feature_keys)
     X_gaia = construct_X(tab_gaia, feature_keys)
-    print('prev spzs')
-    print(X_gaia[:,-1])
+    #print('prev spzs')
+    #print(X_gaia[:,0])
     Y_qsoc = tab_gaia['redshift_qsoc']
     print("N after throwing out bad features:", len(tab_gaia))
     i_has_sdss_redshift = np.isfinite(tab_gaia['sdss_Z'])
@@ -126,8 +181,8 @@ def main():
         dz = np.abs(np.array(Y_qsoc_labeled) - np.array(Y_labeled))/(1 + np.array(Y_labeled))
         # this will be 1 where dz is above the threshold (correct z), 0 if incorrect
         i_correctqsoc = dz<dz_thresh
-        C_class = np.full(len(dz), 0.0)
-        C_class[i_correctqsoc] = 1.0
+        C_labeled = np.full(len(dz), 0.0)
+        C_labeled[i_correctqsoc] = 1.0
         print(f"Fraction QSOC within |dz|<{dz_thresh} [already correct]: {np.sum(i_correctqsoc)/len(i_correctqsoc):.3f}")
         print(f"Fraction QSOC with |dz|>{dz_thresh} [incorrect]: {np.sum(~i_correctqsoc)/len(i_correctqsoc):.3f}")
 
@@ -141,22 +196,45 @@ def main():
         z_bins[-1] += 0.1
         print("z bins:", list(z_bins))
         # minus 1 because bins returns a value 1-N_bins, we want to start with 0 for class labeling 
-        C_class = np.digitize(Y_labeled, z_bins)-1
+        C_labeled = np.digitize(Y_labeled, z_bins)-1
         #i_highz = Y_labeled > z_thresh
-        #C_class = np.full(len(i_highz), 0.0)
-        #C_class[i_highz] = 1.0
+        #C_labeled = np.full(len(i_highz), 0.0)
+        #C_labeled[i_highz] = 1.0
         for n in range(N_classes):
-            print(f"Fraction with C={n}, {z_bins[n]:.2f}<z<{z_bins[n+1]:.2f}: {np.sum(C_class==n)/len(C_class):.3f}")
+            print(f"Fraction with C={n}, {z_bins[n]:.2f}<z<{z_bins[n+1]:.2f}: {np.sum(C_labeled==n)/len(C_labeled):.3f}")
+
+    if mode=='combine':
+
+        Y_spz_prev_labeled = tab_gaia[i_has_sdss_redshift][spz_prev_name]
+        Y_spz_prev2_labeled = tab_gaia[i_has_sdss_redshift][spz_prev2_name]
+    
+        dz_prev = np.abs(np.array(Y_spz_prev_labeled) - np.array(Y_labeled))/(1 + np.array(Y_labeled))
+        dz_prev2 = np.abs(np.array(Y_spz_prev2_labeled) - np.array(Y_labeled))/(1 + np.array(Y_labeled))
+        
+        dz_thresh = 0.2
+        print(f"Fraction prev1 correct to |dz|<{dz_thresh}: {np.sum(dz_prev < dz_thresh)/len(dz_prev):.3f}")
+        print(f"Fraction prev2 correct to |dz|<{dz_thresh}: {np.sum(dz_prev2 < dz_thresh)/len(dz_prev2):.3f}")
+
+        # give 2 if 2 is better AND 1 is bad
+        # give 1 if 1 is better OR 1 is already good (meaning if 1 is good, dont care what 2 is)
+        #i_prev_better = (dz_prev < dz_prev2) | (dz_prev > dz_thresh)
+        i_prev_better = (dz_prev < dz_prev2)
+        C_labeled = np.full(len(dz_prev), 0.0)
+        C_labeled[i_prev_better] = 1.0
+        print(f"Fraction prev1 better: {np.sum(i_prev_better)/len(i_prev_better):.3f}")
+
 
     # this is essentially shuffling an array of 1-N
     #random_ints = rng.choice(range(N_labeled), size=N_labeled, replace=False)
     rand_ints_labeled = tab_gaia['rand_ints_clean'][i_has_sdss_redshift]
     # N_tot=N_gaia because the numbers go up to all the ones in the clean catalog
     idx_train, idx_valid, idx_test = utils.split_train_val_test(rand_ints_labeled, N_tot=N_gaia)
-    chunk_spz = np.empty(N_labeled, dtype='S5')
-    chunk_spz[idx_train] = 'train'
-    chunk_spz[idx_valid] = 'valid'
-    chunk_spz[idx_test] = 'test'
+    chunk_spz_labeled = np.empty(N_labeled, dtype='S5')
+    chunk_spz_labeled[idx_train] = 'train'
+    chunk_spz_labeled[idx_valid] = 'valid'
+    chunk_spz_labeled[idx_test] = 'test'
+    chunk_spz = np.empty(X_gaia.shape[0], dtype='S5')
+    chunk_spz[i_has_sdss_redshift] = chunk_spz_labeled
 
     # split into actual training and validation subset
     #int_divider = int(frac_test*N_gaia)
@@ -176,13 +254,24 @@ def main():
     Y_valid = Y_labeled[idx_valid]
     Y_test = Y_labeled[idx_test]
 
-    if mode=='2step' or mode=='zbins':
-        C_train = C_class[idx_train]
-        C_valid = C_class[idx_valid]
-        C_test = C_class[idx_test]
+    if mode=='2step' or mode=='zbins' or mode=='combine':
+        C_train = C_labeled[idx_train]
+        C_valid = C_labeled[idx_valid]
+        C_test = C_labeled[idx_test]
 
     # Apply to all, including those with SDSS redshifts (for consistency)
-    X_apply = X_gaia
+    if apply_to_all: 
+        i_apply = np.full(X_gaia.shape[0], True)
+    else:
+        # these are byte strings so need the b
+        i_apply = chunk_spz==b'test'
+
+    X_apply = X_gaia[i_apply]
+
+    Y_hat_all = np.full(X_gaia.shape[0], np.nan)
+    Y_hat_spzqsoc_all = np.full(X_gaia.shape[0], np.nan)
+    sigma_z_all = np.full(X_gaia.shape[0], np.nan)
+
     print(f"X_train: {X_train.shape}, Y_train: {Y_train.shape}, X_apply: {X_apply.shape}")
     assert X_train.shape[0]==Y_train.shape[0], "X and Y must have same length!"
 
@@ -218,7 +307,7 @@ def main():
         # Get classifications
         #C_pred_test = redshift_estimator_classifier.Y_hat_apply[i_has_sdss_redshift][idx_test]
         prob_pred_test = redshift_estimator_classifier.Y_hat_apply
-        class_thresh = 0.5
+        class_thresh = 0.4
         i_pred_test_correctqsoc = prob_pred_test > class_thresh
         C_pred_test = np.full(len(prob_pred_test), 0.0)
         C_pred_test[i_pred_test_correctqsoc] = 1.0
@@ -394,14 +483,14 @@ def main():
         i_correctinitial = dz<dz_thresh
         #print("classify one outlier line")
         #i_correctinitial = (dz_noabs>0.3) | (dz_noabs<0.2)
-        C_class = np.full(len(dz), 0.0)
-        C_class[i_correctinitial] = 1.0
+        C_labeled = np.full(len(dz), 0.0)
+        C_labeled[i_correctinitial] = 1.0
         print(f"Fraction initial SPZ within |dz|<{dz_thresh} [correct]: {np.sum(i_correctinitial)/len(i_correctinitial):.3f}")
         print(f"Fraction initial SPZ with |dz|>{dz_thresh} [incorrect]: {np.sum(~i_correctinitial)/len(i_correctinitial):.3f}")
 
-        C_train = C_class[idx_train]
-        C_valid = C_class[idx_valid]
-        C_test = C_class[idx_test]
+        C_train = C_labeled[idx_train]
+        C_valid = C_labeled[idx_valid]
+        C_test = C_labeled[idx_test]
 
         # Replace QSOC in features with SPZ because SPZ better!
         X_train[:,0] = Y_hat_labeled_initial[idx_train]
@@ -503,16 +592,99 @@ def main():
             frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
             print(f"QSOC: {frac_recovered_qsoc:.3f}")
 
-    else:
+    elif mode=='combine':
+
+        redshift_estimator_class_classifier = \
+                redshift_estimator_dict[redshift_estimator_name_classifier]                        
+        redshift_estimator_kwargs_classifier = redshift_estimator_kwargs_dict[redshift_estimator_name_classifier]
+
+        # just X_test for now, but will want X_apply
+        if os.path.exists(fn_model_classifier) and not overwrite_classifier:
+            print(f"Classifier {fn_model_classifier} already exists and overwrite_classifier={overwrite_classifier}")
+            print("So load it in!")
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_apply=X_apply, 
+                                                                                train_mode=False, test_mode=True)
+            redshift_estimator_classifier.load_model(fn_model_classifier)
+        else:           
+            print(f"Training classifier {fn_model_classifier} (overwrite_classifier={overwrite_classifier})")                                                             
+            redshift_estimator_classifier = redshift_estimator_class_classifier(X_train, C_train, X_valid, C_valid, X_apply,
+                                                                                **redshift_estimator_kwargs_classifier)
+            redshift_estimator_classifier.train()
+            # save
+            redshift_estimator_classifier.save_model(fn_model_classifier)
+
+        # Apply classifier
+        redshift_estimator_classifier.apply()  
+
+        prob_pred_apply = redshift_estimator_classifier.Y_hat_apply
+        class_thresh = 0.5
+        print("class thresh:", class_thresh)
+        i_pred_apply_prevbetter = prob_pred_apply > class_thresh
+        C_pred_apply = np.full(len(prob_pred_apply), 0.0)
+        C_pred_apply[i_pred_apply_prevbetter] = 1.0
+        
+        C_pred_all = np.full(X_gaia.shape[0], np.nan)
+        C_pred_all[i_apply] = C_pred_apply
+
+        # grab test ones only to print out info
+        #i_pred_test_prevbetter = i_pred_apply_prevbetter[i_has_sdss_redshift][i_test]
+        C_pred_test = C_pred_all[i_has_sdss_redshift][idx_test]
+        print(f"N prev1-better: {np.sum(C_test==1)}")
+        print(f"N prev2-better: {np.sum(C_test==0)}")
+        print(f"Fraction accurate predicted labels, test set: {np.sum(C_pred_test==C_test)/len(C_test):.3f}")
+
+        print(f"    Fraction of prev1-better SPZs that are predicted to be prev1-better: {np.sum(C_pred_test[C_test==1]==1)/len(C_test[C_test==1]):.3f} (N={np.sum(C_pred_test[C_test==1]==1)})")
+        print(f"    Fraction of prev2-better SPZs that are predicted to be prev2-better: {np.sum(C_pred_test[C_test==0]==0)/len(C_test[C_test==0]):.3f} (N={np.sum(C_pred_test[C_test==0]==0)})")
+        print(f"    Fraction of prev1-better SPZs that are predicted to be prev2-better: {np.sum(C_pred_test[C_test==1]==0)/len(C_test[C_test==1]):.3f} (N={np.sum(C_pred_test[C_test==1]==0)})")
+        print(f"    Fraction of prev2-better SPZs that are predicted to be prev1-better: {np.sum(C_pred_test[C_test==0]==1)/len(C_test[C_test==0]):.3f} (N={np.sum(C_pred_test[C_test==0]==1)})")
+
+        Y_hat_apply = np.empty(X_apply.shape[0])
+
+        # print(len(Y_hat_apply))
+        # print(len(i_pred_apply_prevbetter))
+        # print(len(Y_spz_prev))
+        # print(len(i_apply))
+        # print(Y_hat_apply[i_pred_apply_prevbetter])
+        # print(len(Y_spz_prev[i_apply][i_pred_apply_prevbetter]))
+        Y_hat_apply[i_pred_apply_prevbetter] = tab_gaia[spz_prev_name][i_apply][i_pred_apply_prevbetter]
+        Y_hat_apply[~i_pred_apply_prevbetter] = tab_gaia[spz_prev2_name][i_apply][~i_pred_apply_prevbetter]
+        Y_hat_all[i_apply] = Y_hat_apply
+
+
+        # assign QSOC if close (TODO: revisit, find optimal threshold; probs do in postprocessing)
+        dz_spzqsoc = np.abs(np.array(Y_hat_all[i_apply]) - np.array(Y_qsoc[i_apply]))/(1 + np.array(Y_qsoc[i_apply]))
+        dz_thresh = 0.1
+        i_agree_spzqsoc = dz_spzqsoc<dz_thresh
+        Y_hat_spzqsoc_apply = Y_hat_apply.copy()
+        Y_hat_spzqsoc_apply[i_agree_spzqsoc] = Y_qsoc[i_apply][i_agree_spzqsoc]
+        Y_hat_spzqsoc_all[i_apply] = Y_hat_spzqsoc_apply
+
+        # don't worry bout errors for now
+        sigma_z_all[i_apply] = np.full(np.sum(i_apply), np.nan)
+
+        # Print results
+        # dzs = [0.01, 0.1, 0.2, 1.0]
+        # for dz in dzs:
+        #     print(f"Fraction recovered with Dz/(1+z)<{dz}:")
+        #     frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
+        #     print(f"SPZ: {frac_recovered:.3f}")
+        #     frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
+        #     print(f"QSOC: {frac_recovered_qsoc:.3f}")
+        #     frac_recovered_spzprev = utils.get_fraction_recovered(Y_test, Y_spz_prev[idx_test], dz)
+        #     print(f"SPZ prev 1: {frac_recovered_spzprev:.3f}")
+        #     frac_recovered_spzprev2 = utils.get_fraction_recovered(Y_test, Y_spz_prev2[idx_test], dz)
+        #     print(f"SPZ prev 2: {frac_recovered_spzprev2:.3f}")
+
+    elif mode=='regression':
         if os.path.exists(fn_model) and not overwrite_model:
             print(f"Model {fn_model} already exists and overwrite_model={overwrite_model}")
             print("So load it in!")
-            redshift_estimator = redshift_estimator_class(X_apply=X_test, 
+            redshift_estimator = redshift_estimator_class(X_apply=X_apply, 
                                                           train_mode=False, test_mode=True)
             redshift_estimator.load_model(fn_model)
         else:
             print(f"Training model {fn_model} (overwrite_model={overwrite_model})")                                                             
-            redshift_estimator = redshift_estimator_class(X_train, Y_train, X_valid, Y_valid, X_test,
+            redshift_estimator = redshift_estimator_class(X_train, Y_train, X_valid, Y_valid, X_apply,
                                                           **redshift_estimator_kwargs)
             # for now lets just apply to validation set, deal w full thing later
             #redshift_estimator = redshift_estimator_class(X_train, Y_train, X_test, **redshift_estimator_kwargs)
@@ -521,53 +693,65 @@ def main():
 
         # Apply
         redshift_estimator.apply()
-        #Y_hat_apply = redshift_estimator.Y_hat_apply
-        Y_hat_test = redshift_estimator.Y_hat_apply
+        Y_hat_all[i_apply] = redshift_estimator.Y_hat_apply
+        #Y_hat_test = redshift_estimator.Y_hat_apply
 
-        Y_qsoc_test = Y_qsoc_labeled[idx_test]
-
-        # if spz and qsoc agree, assign qsoc    
-        dz_spzqsoc_test = np.abs(np.array(Y_hat_test) - np.array(Y_qsoc_test))/(1 + np.array(Y_qsoc_test))
-        # this will be 1 where dz is above the threshold (correct z), 0 if incorrect
+        # assign QSOC if close (TODO: revisit, find optimal threshold; probs do in postprocessing)
+        dz_spzqsoc = np.abs(np.array(Y_hat_all[i_apply]) - np.array(Y_qsoc[i_apply]))/(1 + np.array(Y_qsoc[i_apply]))
         dz_thresh = 0.1
-        i_agree_spzqsoc_test = dz_spzqsoc_test<dz_thresh
-        Y_hat_test_spzqsoc = Y_hat_test.copy()
-        Y_hat_test_spzqsoc[i_agree_spzqsoc_test] = Y_qsoc_test[i_agree_spzqsoc_test]
+        i_agree_spzqsoc = dz_spzqsoc<dz_thresh
+        Y_hat_spzqsoc_apply = redshift_estimator.Y_hat_apply
+        Y_hat_spzqsoc_apply[i_agree_spzqsoc] = Y_qsoc[i_apply][i_agree_spzqsoc]
+        Y_hat_spzqsoc_all[i_apply] = Y_hat_spzqsoc_apply
 
-        # Print results
-        dzs = [0.01, 0.1, 0.2, 1.0]
-        for dz in dzs:
-            print(f"Fraction recovered with Dz/(1+z)<{dz}:")
-            frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
-            print(f"SPZ: {frac_recovered:.3f}")
-            frac_recovered_spzqsoc = utils.get_fraction_recovered(Y_test, Y_hat_test_spzqsoc, dz)
-            print(f"SPZ-QSOC: {frac_recovered_spzqsoc:.3f}")
-            frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_test, dz)
-            print(f"QSOC: {frac_recovered_qsoc:.3f}")
+        sigma_z_all[i_apply] = redshift_estimator.sigma_z
 
-    print(slfsfj)
+    else:
+        raise ValueError("MODE NOT RECOGNIZED")
+
+    Y_hat_test = Y_hat_all[i_has_sdss_redshift][idx_test]
+    Y_hat_spzqsoc_test = Y_hat_spzqsoc_all[i_has_sdss_redshift][idx_test]
+    Y_qsoc_test = Y_qsoc[i_has_sdss_redshift][idx_test]
+
+    #print(slfsfj)
     # Print results
     dzs = [0.01, 0.1, 0.2, 1.0]
     for dz in dzs:
         print(f"Fraction recovered with Dz/(1+z)<{dz}:")
-        frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_apply[i_has_sdss_redshift][idx_test], dz)
+        frac_recovered = utils.get_fraction_recovered(Y_test, Y_hat_test, dz)
         print(f"SPZ: {frac_recovered:.3f}")
-        frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_labeled[idx_test], dz)
+        frac_recovered_spzqsoc = utils.get_fraction_recovered(Y_test, Y_hat_spzqsoc_test, dz)
+        print(f"SPZ-QSOC: {frac_recovered_spzqsoc:.3f}")
+        frac_recovered_qsoc = utils.get_fraction_recovered(Y_test, Y_qsoc_test, dz)
         print(f"QSOC: {frac_recovered_qsoc:.3f}")
+        if fn_prev_estimate is not None:
+            i_feat = feature_keys.index(spz_prev_name)
+            Y_spzprev_test = X_gaia[i_has_sdss_redshift][idx_test][:,i_feat]
+            frac_recovered_spzprev = utils.get_fraction_recovered(Y_test, Y_spzprev_test, dz)
+            print(f"SPZ_prev: {frac_recovered_spzprev:.3f}")
+        if mode=='combine' and fn_prev2_estimate is not None:
+            i_feat = feature_keys.index(spz_prev2_name)
+            Y_spzprev2_test = X_gaia[i_has_sdss_redshift][idx_test][:,i_feat]
+            frac_recovered_spzprev2 = utils.get_fraction_recovered(Y_test, Y_spzprev2_test, dz)
+            print(f"SPZ_prev2: {frac_recovered_spzprev2:.3f}")     
 
     # # Save model
     # redshift_estimator.save_model(fn_model)
 
     # Save results
-    print("Save results")
-    columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z', 'rand_ints_clean']
-    tab_gaia.keep_columns(columns_to_keep)
-    tab_gaia['redshift_spz'] = Y_hat_apply
-    tab_gaia['redshift_spz_err'] = redshift_estimator.sigma_z
-    tab_gaia['chunk_spz'] = np.full(len(tab_gaia), '', dtype='S5')
-    tab_gaia['chunk_spz'][i_has_sdss_redshift] = chunk_spz
-    tab_gaia.write(fn_spz, overwrite_table=overwrite_table)
-    print(f"Wrote specphotozs to {fn_spz}!")
+    if save_table:
+        print("Save results")
+        columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z', 'rand_ints_clean']
+        tab_gaia.keep_columns(columns_to_keep)
+        tab_gaia['redshift_spz'] = Y_hat_all
+        #tab_gaia['redshift_spzqsoc'] = Y_hat_apply_spzqsoc
+        tab_gaia['redshift_spzqsoc'] = Y_hat_spzqsoc_all
+        tab_gaia['redshift_spz_err'] = sigma_z_all
+        #tab_gaia['chunk_spz'] = np.full(len(tab_gaia), '', dtype='S5')
+        #tab_gaia['chunk_spz'][i_has_sdss_redshift] = chunk_spz
+        tab_gaia['chunk_spz'] = chunk_spz
+        tab_gaia.write(fn_spz, overwrite=overwrite_table)
+        print(f"Wrote specphotozs to {fn_spz}!")
 
 
 def construct_X(tab, feature_keys):
@@ -578,8 +762,8 @@ def construct_X(tab, feature_keys):
     X = np.array(X).T
     i_badfeat = np.any(~np.isfinite(X), axis=1)
     # shouldn't be any bad features because we cleaned up first in make_data_tables.gaia_clean()
-    assert np.sum(i_badfeat)==0, "Some bad feature data in clean catalog!"
-    
+    #assert np.sum(i_badfeat)==0, "Some bad feature data in clean catalog!"
+    # TODO: put back this assert when doing real apply; removing for now bc only test
     return X
 
 
@@ -820,10 +1004,12 @@ def seed_worker(worker_id):
 
 class RedshiftEstimatorANN(RedshiftEstimator):
     
-    def __init__(self, *args, rng=None, learning_rate=0.005, batch_size=512, **kwargs):
+    def __init__(self, *args, feature_keys=None, rng=None, learning_rate=0.005, batch_size=512,
+                 **kwargs):
         self.rng = rng
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.feature_keys = feature_keys
         super().__init__(*args, **kwargs)
         if self.train_mode:
             assert rng is not None, "Must pass RNG for ANN!"
@@ -870,8 +1056,18 @@ class RedshiftEstimatorANN(RedshiftEstimator):
 
     def scale_x(self):
         N_feat = self.X_train.shape[1]
-        # assumes redshift_qsoc is first column
-        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), np.arange(1,N_feat))], remainder='passthrough')
+        # for all columns with word redshift, do not scale
+        if self.feature_keys is not None:
+            idx_features_to_scale = []
+            for idx, feat_key in enumerate(self.feature_keys):
+                if 'redshift' not in feat_key:
+                    idx_features_to_scale.append(idx)
+        else:
+            idx_features_to_scale = np.arange(N_feat)
+        print("Features to scale:", idx_features_to_scale)
+        print("Feature keys:", self.feature_keys)
+        self.scaler_x = ColumnTransformer([("standard", StandardScaler(), 
+                                           np.array(idx_features_to_scale))], remainder='passthrough')
         #self.scaler_x = StandardScaler()
         self.scaler_x.fit(self.X_train_sub)
         self.X_train_sub_scaled = self.scaler_x.transform(self.X_train_sub)
@@ -932,7 +1128,7 @@ class RedshiftEstimatorANN(RedshiftEstimator):
 
 
 
-    def train(self, hidden_size=512, max_epochs=20, 
+    def train(self, hidden_size=512, max_epochs=30, 
               fn_model=None, save_at_min_loss=True):
 
         input_size = self.X_train.shape[1] # number of features
@@ -1133,8 +1329,8 @@ class RedshiftEstimatorANN2class(RedshiftEstimator):
         pos_weight = N/N_pos - 1 #this is equiv to N_neg/N_pos, as that forum says
         
         print('pos_weight:', N_pos, N, pos_weight)
-        pos_weight *= 0.7
-        print("DEFLATING POS_WEIGHT, now", pos_weight)
+        #pos_weight *= 1.3
+        #print("INFLATING POS_WEIGHT, now", pos_weight)
 
         self.criterion = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
