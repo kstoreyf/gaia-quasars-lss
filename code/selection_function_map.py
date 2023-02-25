@@ -10,6 +10,8 @@ import maps
 
 def main():
 
+    # TODO: remove constant in X; dont need for GP
+
     map_names = ['dust', 'stars', 'm10']
     NSIDE = 64
     #G_max = 19.9
@@ -80,7 +82,6 @@ def main():
 #hack! better way?
 def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
     idx_clean = np.full(len(map_expected), True)
-    clean_lim_dict = {'dust': 0.3, 'stars': 15, 'm10': 21}
     for map_name, map in zip(map_names, maps_forsel):
         if map_name=='dust':
             idx_map = map < 0.03

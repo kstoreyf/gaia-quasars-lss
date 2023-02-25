@@ -171,7 +171,8 @@ def get_m10_map(NSIDE, fn_map=None):
         return np.load(fn_map)
     print(f"Generating new m10 map ({fn_map})")
     # fix this NSIDE to make dust map determinisitic 
-    NSIDE_high = 2048
+    # map is built at 128, so no need to go higher than that
+    NSIDE_high = 128
     NPIX_high = hp.nside2npix(NSIDE_high)
     # get the positions and Av values at the center of a high-NSIDE map
     print("NPIX for dust map sampling:", NPIX_high)
