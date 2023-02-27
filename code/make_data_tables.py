@@ -10,9 +10,11 @@ def main():
     overwrite = True
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
+    #sdss_xgaia_good(overwrite=overwrite)
+    galaxies_sdss_xgaia_good(overwrite=overwrite)
 
     #gaia_slim_xsdss(overwrite=overwrite)
-    gaia_clean(overwrite=overwrite)
+    #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
     # G_maxs = [20.0]
@@ -168,6 +170,82 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
     # SPZ-only table
     tab_spz = utils.load_table(fn_spz)
     join_and_save(tab_gaia, tab_spz, fn_gaia_withspz, overwrite=overwrite)
+
+
+def sdss_xgaia_good(overwrite=False):
+
+    fn_sdss_xgaia_good = '../data/sdss_xgaia_wise_good.fits.gz'
+
+    print("Load in SDSS xgaia data")
+    # We couldn't get ZWARNING flag for some reason from Gaia archive
+    fn_sdss_xgaia = '../data/sdss_xgaia_wise.fits.gz'
+    tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia)
+    print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
+
+    print("Load in SDSS data")
+    fn_sdss_slim = '../data/sdss_slim.fits'
+    tab_sdss = utils.load_table(fn_sdss_slim)
+    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
+
+    tab_sdss.keep_columns(['OBJID', 'ZWARNING'])
+    i_bad_objid = tab_sdss['OBJID'].mask
+    print(f"Found {np.sum(i_bad_objid)} objects with no object ID! removing")
+    tab_sdss = tab_sdss[~i_bad_objid]
+
+
+    # inner join because we'll just remove the bad object IDs 
+    tab_sdss_xgaia = join(tab_sdss_xgaia, tab_sdss, keys_left='objid', keys_right='OBJID', join_type='inner')
+    print(len(tab_sdss_xgaia))
+
+    # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
+    i_good_nobs = (tab_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_sdss_xgaia['phot_rp_n_obs'] >= 5)
+    print(f"Removing {np.sum(~i_good_nobs)} sources with <5 bp or rp n_obs")
+    tab_sdss_xgaia = tab_sdss_xgaia[i_good_nobs]
+
+    # Clean out super low redshift SDSS objects, and ones with bad redshifts
+    # TODO: double check if should be doing this
+    z_min = 0.01 #magic #hyperparameter
+    redshift_key = 'z'
+    idx_zgood = utils.redshift_cut_index(tab_sdss_xgaia, z_min, redshift_key)
+    print(f"Removing {np.sum(~idx_zgood)} sources with z<{z_min}")
+    tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
+
+    # https://www.sdss4.org/dr16/algorithms/bitmasks/#ZWARNING
+    idx_zwarn0 = tab_sdss_xgaia['ZWARNING']==0
+    tab_sdss_xgaia = tab_sdss_xgaia[idx_zwarn0]
+    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
+
+    tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
+
+
+def galaxies_sdss_xgaia_good(overwrite=False):
+
+    fn_gals_sdss_xgaia_good = '../data/galaxies_sdss_xgaia_wise_good.fits.gz'
+
+    print("Load in SDSS xgaia data")
+    # We couldn't get ZWARNING flag for some reason from Gaia archive
+    fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_wise.fits.gz'
+    tab_gals_sdss_xgaia = utils.load_table(fn_gals_sdss_xgaia)
+    print(f"Number of SDSS xGaia Galaxies: {len(tab_gals_sdss_xgaia)}")
+
+    # Already removed ZWARNING gals in query !
+
+    # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
+    i_good_nobs = (tab_gals_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_gals_sdss_xgaia['phot_rp_n_obs'] >= 5)
+    print(f"Removing {np.sum(~i_good_nobs)} sources with <5 bp or rp n_obs")
+    tab_gals_sdss_xgaia = tab_gals_sdss_xgaia[i_good_nobs]
+
+    # Remove apparent stellar contaminants (Bailer-Jones 2019)
+    G = tab_gals_sdss_xgaia['phot_g_mean_mag']
+    BP = tab_gals_sdss_xgaia['phot_bp_mean_mag']
+    RP = tab_gals_sdss_xgaia['phot_rp_mean_mag']
+    i_badgal = (G - RP) < (0.3 + 1.1*(BP-G) - 0.29*(BP-G)**2)
+    print(f"Removing {np.sum(i_badgal)} suspected stellar contaminants")
+    tab_gals_sdss_xgaia = tab_gals_sdss_xgaia[~i_badgal]
+
+    tab_gals_sdss_xgaia.write(fn_gals_sdss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gals_sdss_xgaia)} objects to {fn_gals_sdss_xgaia_good}")
 
 
 def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False):
