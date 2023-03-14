@@ -38,8 +38,8 @@ def main():
     #redshift_estimator_name_classifier = 'ANN2class'
     #redshift_estimator_name_classifier = 'SVM'
     #redshift_estimator_name_classifier = 'ANNmulticlass'
-    redshift_estimator_name = 'ANN'
-    #redshift_estimator_name = 'kNN'
+    #redshift_estimator_name = 'ANN'
+    redshift_estimator_name = 'kNN'
     learning_rate_classifier = 0.001
     learning_rate = 0.005
     apply_to_all = True
@@ -64,8 +64,8 @@ def main():
     # save names
     #save_tag_model = f'_{mode}_wANNspz'
     #save_tag_model = f'_{mode}_wkNNspz_andqsoc_wmags'
-    save_tag_model = f'_{mode}_lr{learning_rate}_wkNNspz'
-    #save_tag_model = '_notused'
+    #save_tag_model = f'_{mode}_lr{learning_rate}_wkNNspz'
+    save_tag_model = f'_{mode}'
     save_tag_classifier = '_notused'
     #save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_kNN_ANNwkwmags_wmags_goodorbetter'
     #save_tag_classifier = f'_{mode}_lr{learning_rate_classifier}_kNN_ANNwkwmags_wmags'
@@ -743,12 +743,9 @@ def main():
         print("Save results")
         columns_to_keep = ['source_id', 'sdss_OBJID', 'phot_g_mean_mag', 'redshift_qsoc', 'sdss_Z', 'rand_ints_clean']
         tab_gaia.keep_columns(columns_to_keep)
-        tab_gaia['redshift_spz'] = Y_hat_all
-        #tab_gaia['redshift_spzqsoc'] = Y_hat_apply_spzqsoc
-        tab_gaia['redshift_spzqsoc'] = Y_hat_spzqsoc_all
+        tab_gaia['redshift_spz_raw'] = Y_hat_all
+        tab_gaia['redshift_spz'] = Y_hat_spzqsoc_all
         tab_gaia['redshift_spz_err'] = sigma_z_all
-        #tab_gaia['chunk_spz'] = np.full(len(tab_gaia), '', dtype='S5')
-        #tab_gaia['chunk_spz'][i_has_sdss_redshift] = chunk_spz
         tab_gaia['chunk_spz'] = chunk_spz
         tab_gaia.write(fn_spz, overwrite=overwrite_table)
         print(f"Wrote specphotozs to {fn_spz}!")

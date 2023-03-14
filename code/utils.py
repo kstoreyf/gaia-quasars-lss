@@ -57,12 +57,12 @@ def get_fraction_recovered(Y_true, Y_hat, dz):
         return np.sum(np.abs(Y_hat - Y_true)/(1 + Y_true) < dz) / len(Y_true)
 
 
-def add_gaia_wise_colors(tab):
+def add_gaia_wise_colors(tab, w1_name='mag_w1_vg', w2_name='mag_w2_vg'):
     g = tab['phot_g_mean_mag']
     bp = tab['phot_bp_mean_mag']
     rp = tab['phot_rp_mean_mag']
-    w1 = tab['w1mpro']
-    w2 = tab['w2mpro']
+    w1 = tab[w1_name]
+    w2 = tab[w2_name]
 
     tab.add_column(g-rp, name='g_rp')
     tab.add_column(bp-g, name='bp_g')

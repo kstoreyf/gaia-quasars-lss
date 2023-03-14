@@ -11,16 +11,24 @@ def main():
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
     #sdss_xgaia_good(overwrite=overwrite)
-    galaxies_sdss_xgaia_good(overwrite=overwrite)
+    #galaxies_sdss_xgaia_good(overwrite=overwrite)
+    #gaia_unwise_slim(overwrite=overwrite)
+    #gaia_catwise_slim(overwrite=overwrite)
 
     #gaia_slim_xsdss(overwrite=overwrite)
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    # G_maxs = [20.0]
-    # fn_spz='../data/redshifts_spz_kNN_G20.5.fits'
-    # for G_max in G_maxs:
-    #     merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
+    G_maxs = [20.0, 20.4]
+    fn_spz='../data/redshift_estimates/redshifts_spz_kNN_G20.5_regression.fits'
+    for G_max in G_maxs:
+        merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
+
+    # save as csv
+    # fn_gaia_slim = '../data/gaia_slim.fits'
+    # tab_gaia = utils.load_table(fn_gaia_slim)
+    # fn_csv = '../data/gaia_candidates.csv'
+    # save_as_csv(tab_gaia, ['source_id', 'ra', 'dec'], fn_csv, overwrite=overwrite)
 
 
 def gaia_slim(overwrite=False):
@@ -49,6 +57,78 @@ def gaia_slim(overwrite=False):
     tab_gaia_slim = save_slim_table(tab_gaia, columns_to_keep, fn_gaia_slim, overwrite=overwrite)
 
 
+def gaia_unwise_slim(overwrite=False):
+    # save names
+    fn_gaia_unwise_slim = '../data/gaia_unwise_slim.fits'
+   
+    # data paths 
+    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
+
+    # Load data
+    print("Loading data")
+    tab_gaia = utils.load_table(fn_gaia)
+    print(tab_gaia.columns)
+
+    fn_xwise = '../data/gaia_candidates_unwise_nn.csv'
+    tab_xwise = Table.read(fn_xwise, format='csv')
+    tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
+    print(tab_xwise.columns)
+    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
+                          join_type='left')
+    print(tab_gaia_xwise.columns)
+
+    rng = np.random.default_rng(seed=42)
+    tab_gaia_xwise['rand_ints'] = rng.choice(range(len(tab_gaia_xwise)), size=len(tab_gaia_xwise), replace=False)
+
+    # Create and save
+    columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
+                        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                        'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
+                        'mag_w1_vg', 'mag_w2_vg', 'unwise_objid',
+                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
+                        'parallax', 'parallax_error', 
+                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
+    tab_gaia_xwise_slim = save_slim_table(tab_gaia_xwise, columns_to_keep, fn_gaia_unwise_slim, overwrite=overwrite)
+
+
+def gaia_catwise_slim(overwrite=False):
+    # save names
+    fn_gaia_unwise_slim = '../data/gaia_catwise_slim.fits'
+   
+    # data paths 
+    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
+
+    # Load data
+    print("Loading data")
+    tab_gaia = utils.load_table(fn_gaia)
+    print(tab_gaia.columns)
+
+    fn_xwise = '../data/gaia_candidates_catwise_nn.csv'
+    tab_xwise = Table.read(fn_xwise, format='csv')
+    print(tab_xwise.columns)
+    tab_xwise.keep_columns(['t1_source_id', 'source_id', 'w1mag', 'w2mag'])
+    tab_xwise.rename_column('source_id', 'catwise_source_id')
+    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
+                          join_type='left')
+    print(tab_gaia_xwise.columns)
+
+    rng = np.random.default_rng(seed=42)
+    tab_gaia_xwise['rand_ints'] = rng.choice(range(len(tab_gaia_xwise)), size=len(tab_gaia_xwise), replace=False)
+
+    # Create and save
+    columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
+                        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                        'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
+                        'w1mag', 'w2mag', 'catwise_source_id',
+                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
+                        'parallax', 'parallax_error', 
+                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
+    tab_gaia_xwise_slim = save_slim_table(tab_gaia_xwise, columns_to_keep, fn_gaia_unwise_slim, 
+                                          w1_name='w1mag', w2_name='w2mag', overwrite=overwrite)
+
+
+
+
 def gaia_clean(overwrite=False):
     
     fn_gaia_clean = '../data/gaia_clean.fits'
@@ -60,12 +140,11 @@ def gaia_clean(overwrite=False):
     print('N_gaia:', len(tab_gaia))
 
     print("Cutting sources without all necessary data (colors and QSOC redshifts)")
-    # TODO is there a reason i shouldnt be cutting on QSOC redshift here? or having g,bp,rp?
+    # TODO is there a reason i shouldnt be cutting on QSOC redshift here? or having g,bp,rp,w1,w2?
     col_names_necessary = ['redshift_qsoc', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
     cols_necessary = []
     for col_name in col_names_necessary:
         cols_necessary.append(tab_gaia[col_name])
-        i_neg = tab_gaia[col_name]<0
     cols_necessary = np.array(cols_necessary).T
     i_has_necessary = np.all(np.isfinite(cols_necessary), axis=1)
     print(f"Has necessary color data: {np.sum(i_has_necessary)} ({np.sum(i_has_necessary)/len(i_has_necessary):.3f})")
@@ -100,13 +179,13 @@ def sdss_slim(overwrite=False):
     save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
 
 
-def gaia_slim_xsdss(overwrite=False):
+def gaia_slim_xsdss(fn_gaia_slim, fn_gaia_slim_xsdss, overwrite=False):
 
-    fn_gaia_slim_xsdss = '../data/gaia_slim_xsdss.fits'
+    #fn_gaia_slim_xsdss='../data/gaia_slim_xsdss.fits'
     
     # Load data
     print("Loading gaia data")
-    fn_gaia_slim = '../data/gaia_slim.fits'
+    #fn_gaia_slim = '../data/gaia_slim.fits'
     tab_gaia = utils.load_table(fn_gaia_slim)
     print('N_gaia:', len(tab_gaia))
 
@@ -219,12 +298,16 @@ def sdss_xgaia_good(overwrite=False):
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
 
 
+# galaxies via sdss skyserver CAS, 
+# https://skyserver.sdss.org/CasJobs/jobdetails.aspx?id=59558048&message=Details%20of%2059558048
+# SELECT
+# specObjID, ra, dec into mydb.MyTable from SpecObjAll
+# WHERE class='GALAXY' AND subClass!='AGN' AND subClass!='AGN BROADLINE' AND zWarning=0
 def galaxies_sdss_xgaia_good(overwrite=False):
 
     fn_gals_sdss_xgaia_good = '../data/galaxies_sdss_xgaia_wise_good.fits.gz'
 
     print("Load in SDSS xgaia data")
-    # We couldn't get ZWARNING flag for some reason from Gaia archive
     fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_wise.fits.gz'
     tab_gals_sdss_xgaia = utils.load_table(fn_gals_sdss_xgaia)
     print(f"Number of SDSS xGaia Galaxies: {len(tab_gals_sdss_xgaia)}")
@@ -248,10 +331,11 @@ def galaxies_sdss_xgaia_good(overwrite=False):
     print(f"Wrote table with {len(tab_gals_sdss_xgaia)} objects to {fn_gals_sdss_xgaia_good}")
 
 
-def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False):
+def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False, 
+                    w1_name='mag_w1_vg', w2_name='mag_w2_vg'):
     gaia_wise_colors = ['g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
     if np.any(np.in1d(gaia_wise_colors, columns_to_keep)):
-        utils.add_gaia_wise_colors(tab)
+        utils.add_gaia_wise_colors(tab, w1_name=w1_name, w2_name=w2_name)
     if 'ebv' in columns_to_keep or 'A_v' in columns_to_keep:
         utils.add_ebv(tab)
     if 'A_v' in columns_to_keep:
@@ -272,6 +356,14 @@ def join_and_save(tab1, tab2, fn_save, join_key='source_id', overwrite=False):
     tab_joined.write(fn_save, overwrite=overwrite)
     print(f"Wrote table with {len(tab_joined)} objects to {fn_save}")
     return tab_joined
+
+
+def save_as_csv(tab, column_names, fn_csv, overwrite=False):
+    tab = tab.copy()
+    tab.keep_columns(column_names)
+    tab.write(fn_csv, format='csv', overwrite=overwrite)  
+    print(f"Saved table as CSV to {fn_csv}!")
+
 
 
 if __name__=='__main__':
