@@ -114,8 +114,8 @@ def redshift_cut_index(tab, z_min, redshift_key):
     return idx_zgood
 
 
-def load_table(fn_fits):
-    return Table.read(fn_fits, format='fits')
+def load_table(fn_fits, format='fits'):
+    return Table.read(fn_fits, format=format)
 
 
 def write_table(fn_table, data_cols, col_names, overwrite=False):

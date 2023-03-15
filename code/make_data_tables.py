@@ -10,8 +10,11 @@ def main():
     overwrite = True
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
-    #sdss_xgaia_good(overwrite=overwrite)
+    #quasars_sdss_xgaia_good(overwrite=overwrite)
     #galaxies_sdss_xgaia_good(overwrite=overwrite)
+    #stars_sdss_xgaia_good(overwrite=overwrite)
+    remove_duplicate_sources(overwrite=overwrite)
+
     #gaia_unwise_slim(overwrite=overwrite)
     #gaia_catwise_slim(overwrite=overwrite)
 
@@ -19,10 +22,10 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    G_maxs = [20.0, 20.4]
-    fn_spz='../data/redshift_estimates/redshifts_spz_kNN_G20.5_regression.fits'
-    for G_max in G_maxs:
-        merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
+    # G_maxs = [20.0, 20.4]
+    # fn_spz='../data/redshift_estimates/redshifts_spz_kNN_G20.5_regression.fits'
+    # for G_max in G_maxs:
+    #     merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -251,30 +254,24 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
     join_and_save(tab_gaia, tab_spz, fn_gaia_withspz, overwrite=overwrite)
 
 
-def sdss_xgaia_good(overwrite=False):
+def quasars_sdss_xgaia_good(overwrite=False):
 
-    fn_sdss_xgaia_good = '../data/sdss_xgaia_wise_good.fits.gz'
+    #fn_sdss_xgaia_good = '../data/sdss_xgaia_wise_good.fits.gz'
+    fn_sdss_xgaia_good = '../data/quasars_sdss_xgaia_xunwise_good.fits'
 
     print("Load in SDSS xgaia data")
-    # We couldn't get ZWARNING flag for some reason from Gaia archive
-    fn_sdss_xgaia = '../data/sdss_xgaia_wise.fits.gz'
-    tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia)
+    fn_sdss_xgaia = '../data/quasars_sdss_xgaia_xunwise.csv'
+    tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
-
-    print("Load in SDSS data")
-    fn_sdss_slim = '../data/sdss_slim.fits'
-    tab_sdss = utils.load_table(fn_sdss_slim)
-    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
-
-    tab_sdss.keep_columns(['OBJID', 'ZWARNING'])
-    i_bad_objid = tab_sdss['OBJID'].mask
-    print(f"Found {np.sum(i_bad_objid)} objects with no object ID! removing")
-    tab_sdss = tab_sdss[~i_bad_objid]
-
-
-    # inner join because we'll just remove the bad object IDs 
-    tab_sdss_xgaia = join(tab_sdss_xgaia, tab_sdss, keys_left='objid', keys_right='OBJID', join_type='inner')
-    print(len(tab_sdss_xgaia))
+    tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
+    tab_sdss_xgaia.rename_column('dec', 'dec_unwise')
+    for column_name in list(tab_sdss_xgaia.columns):
+        new_name = column_name
+        if column_name.startswith('t1'):
+            new_name = column_name.split('t1_')[-1]
+            if new_name=='z':
+                new_name = 'z_sdss'
+        tab_sdss_xgaia.rename_column(column_name, new_name)
 
     # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
     i_good_nobs = (tab_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_sdss_xgaia['phot_rp_n_obs'] >= 5)
@@ -282,17 +279,13 @@ def sdss_xgaia_good(overwrite=False):
     tab_sdss_xgaia = tab_sdss_xgaia[i_good_nobs]
 
     # Clean out super low redshift SDSS objects, and ones with bad redshifts
-    # TODO: double check if should be doing this
     z_min = 0.01 #magic #hyperparameter
-    redshift_key = 'z'
+    redshift_key = 'z_sdss'
     idx_zgood = utils.redshift_cut_index(tab_sdss_xgaia, z_min, redshift_key)
     print(f"Removing {np.sum(~idx_zgood)} sources with z<{z_min}")
     tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
-
-    # https://www.sdss4.org/dr16/algorithms/bitmasks/#ZWARNING
-    idx_zwarn0 = tab_sdss_xgaia['ZWARNING']==0
-    tab_sdss_xgaia = tab_sdss_xgaia[idx_zwarn0]
     print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
+    # Note that we already did zwarning cut in Gaia cross-match, so don't need to here (didn't save zwarning)
 
     tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
@@ -301,18 +294,27 @@ def sdss_xgaia_good(overwrite=False):
 # galaxies via sdss skyserver CAS, 
 # https://skyserver.sdss.org/CasJobs/jobdetails.aspx?id=59558048&message=Details%20of%2059558048
 # SELECT
-# specObjID, ra, dec into mydb.MyTable from SpecObjAll
+# specObjID, ra, dec into mydb.MyTable from SpecObj
 # WHERE class='GALAXY' AND subClass!='AGN' AND subClass!='AGN BROADLINE' AND zWarning=0
 def galaxies_sdss_xgaia_good(overwrite=False):
 
-    fn_gals_sdss_xgaia_good = '../data/galaxies_sdss_xgaia_wise_good.fits.gz'
+    fn_gals_sdss_xgaia_good = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
 
     print("Load in SDSS xgaia data")
-    fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_wise.fits.gz'
-    tab_gals_sdss_xgaia = utils.load_table(fn_gals_sdss_xgaia)
+    fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_xunwise.csv'
+    tab_gals_sdss_xgaia = utils.load_table(fn_gals_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia Galaxies: {len(tab_gals_sdss_xgaia)}")
-
-    # Already removed ZWARNING gals in query !
+    print(tab_gals_sdss_xgaia.columns)
+    tab_gals_sdss_xgaia.rename_column('ra', 'ra_unwise')
+    tab_gals_sdss_xgaia.rename_column('dec', 'dec_unwise')
+    for column_name in list(tab_gals_sdss_xgaia.columns):
+        new_name = column_name
+        if column_name.startswith('t1'):
+            new_name = column_name.split('t1_')[-1]
+        tab_gals_sdss_xgaia.rename_column(column_name, new_name)
+    print(tab_gals_sdss_xgaia.columns)
+       
+    # We already removed ZWARNING gals in SQL query on SDSS archive!
 
     # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
     i_good_nobs = (tab_gals_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_gals_sdss_xgaia['phot_rp_n_obs'] >= 5)
@@ -329,6 +331,64 @@ def galaxies_sdss_xgaia_good(overwrite=False):
 
     tab_gals_sdss_xgaia.write(fn_gals_sdss_xgaia_good, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gals_sdss_xgaia)} objects to {fn_gals_sdss_xgaia_good}")
+
+
+def stars_sdss_xgaia_good(overwrite=False):
+
+    fn_stars_sdss_xgaia_good = '../data/stars_sdss_xgaia_xunwise_good.fits'
+
+    print("Load in SDSS xgaia data")
+    fn_stars_sdss_xgaia = '../data/stars_sdss_xgaia_xunwise.csv'
+    tab_stars_sdss_xgaia = utils.load_table(fn_stars_sdss_xgaia, format='csv')
+    print(f"Number of SDSS xGaia Stars: {len(tab_stars_sdss_xgaia)}")
+    print(tab_stars_sdss_xgaia.columns)
+    tab_stars_sdss_xgaia.rename_column('ra', 'ra_unwise')
+    tab_stars_sdss_xgaia.rename_column('dec', 'dec_unwise')
+    for column_name in list(tab_stars_sdss_xgaia.columns):
+        new_name = column_name
+        if column_name.startswith('t1'):
+            new_name = column_name.split('t1_')[-1]
+        tab_stars_sdss_xgaia.rename_column(column_name, new_name)
+    print(tab_stars_sdss_xgaia.columns)
+       
+    # We already removed ZWARNING gals in SQL query on SDSS archive!
+
+    # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
+    i_good_nobs = (tab_stars_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_stars_sdss_xgaia['phot_rp_n_obs'] >= 5)
+    print(f"Removing {np.sum(~i_good_nobs)} sources with <5 bp or rp n_obs")
+    tab_stars_sdss_xgaia = tab_stars_sdss_xgaia[i_good_nobs]
+
+    tab_stars_sdss_xgaia.write(fn_stars_sdss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_stars_sdss_xgaia)} objects to {fn_stars_sdss_xgaia_good}")
+
+
+def remove_duplicate_sources(overwrite=False):
+
+    fn_quasars = '../data/quasars_sdss_xgaia_xunwise_good.fits'
+    fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
+    fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
+    fns = [fn_quasars, fn_galaxies, fn_stars]
+    source_ids = []
+    tabs = []
+    for fn in fns:
+        tab = utils.load_table(fn)
+        source_ids.extend(list(tab['source_id']))
+        tabs.append(tab)
+        # u, c = np.unique(list(tab['source_id']), return_counts=True)
+        # dup = u[c > 1]
+        # print(len(dup))
+        # print(dup)
+
+    # This finds duplicates both within tables and across tables, as we want
+    u, c = np.unique(source_ids, return_counts=True)
+    dup = u[c > 1]
+    print(len(dup))
+
+    for tab in tabs:
+        i_nondup = 
+    #for tab in tabs:
+        
+    
 
 
 def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False, 
