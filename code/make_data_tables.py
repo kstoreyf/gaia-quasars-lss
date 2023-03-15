@@ -10,6 +10,8 @@ def main():
     overwrite = True
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
+    #gaia_purer_sourceids(overwrite=overwrite)
+
     #quasars_sdss_xgaia_good(overwrite=overwrite)
     #galaxies_sdss_xgaia_good(overwrite=overwrite)
     #stars_sdss_xgaia_good(overwrite=overwrite)
@@ -92,6 +94,14 @@ def gaia_unwise_slim(overwrite=False):
                         'parallax', 'parallax_error', 
                         'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
     tab_gaia_xwise_slim = save_slim_table(tab_gaia_xwise, columns_to_keep, fn_gaia_unwise_slim, overwrite=overwrite)
+
+
+def gaia_purer_sourceids(overwrite=False):
+    fn_gaia_purer = '/scratch/ksf293/gaia-quasars-lss/data/gaia_purer.fits'
+    fn_gaia_purer_sourceids = '../data/gaia_purer_sourceids.fits'
+    tab_gaia_purer = utils.load_table(fn_gaia_purer)
+    tab_gaia_purer.keep_columns(['source_id'])
+    tab_gaia_purer.write(fn_gaia_purer_sourceids, overwrite=overwrite)
 
 
 def gaia_catwise_slim(overwrite=False):
@@ -364,6 +374,7 @@ def stars_sdss_xgaia_good(overwrite=False):
 
 def remove_duplicate_sources(overwrite=False):
 
+    print("Loading tables")
     fn_quasars = '../data/quasars_sdss_xgaia_xunwise_good.fits'
     fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
     fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
@@ -374,20 +385,23 @@ def remove_duplicate_sources(overwrite=False):
         tab = utils.load_table(fn)
         source_ids.extend(list(tab['source_id']))
         tabs.append(tab)
-        # u, c = np.unique(list(tab['source_id']), return_counts=True)
-        # dup = u[c > 1]
-        # print(len(dup))
-        # print(dup)
 
+    print("Finding duplicates")
     # This finds duplicates both within tables and across tables, as we want
+    # https://stackoverflow.com/a/51297779
     u, c = np.unique(source_ids, return_counts=True)
-    dup = u[c > 1]
-    print(len(dup))
+    source_ids_duplicate = u[c > 1]
+    print(f"Found {len(source_ids_duplicate)} duplicated source_ids")
 
-    for tab in tabs:
-        i_nondup = 
-    #for tab in tabs:
-        
+    for i, tab in enumerate(tabs):
+        i_dup = np.isin(tab['source_id'], source_ids_duplicate)
+        print(f"Removing {np.sum(i_dup)} from {fns[i]}")
+        print(f"Old table size: {len(tab)}")
+        tab = tab[~i_dup]
+        print(f"New table size: {len(tab)}")
+        fn_save = fns[i].split('.fits')[0] + '_nodup.fits'
+        print(f"Saving to {fn_save}")
+        tab.write(fn_save, overwrite=overwrite)        
     
 
 
