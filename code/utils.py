@@ -5,7 +5,7 @@ import pandas as pd
 import healpy as hp
 from astropy import units as u
 from astropy.table import Table
-from astropy.coordinates import SkyCoord, match_coordinates_sky
+from astropy.coordinates import SkyCoord, match_coordinates_sky, search_around_sky
 from dustmaps.sfd import SFDQuery
 
 import matplotlib
@@ -71,13 +71,14 @@ def add_gaia_wise_colors(tab, w1_name='mag_w1_vg', w2_name='mag_w2_vg'):
     tab.add_column(w1-w2, name='w1_w2')
 
 
-def gw1_w1w2_cuts_index(tab, color_cuts):
+# CHANGED from tab input to g_w1, w1_w2
+def gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts):
 
     # start with all
-    idx_clean = np.full(len(tab), True)
+    idx_clean = np.full(len(g_w1), True)
 
     for cut in color_cuts:
-        idx_colorcut = gw1_w1w2_cut_index(tab['g_w1'], tab['w1_w2'], cut)
+        idx_colorcut = gw1_w1w2_cut_index(g_w1, w1_w2, cut)
         idx_clean = idx_clean & idx_colorcut
     
     print(f'Fraction that make cuts: {np.sum(idx_clean)/len(idx_clean):.3f}')
@@ -88,7 +89,7 @@ def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
 
 
 # gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
-def cross_match(ra1, dec1, ra2, dec2, separation):
+def cross_match_nearest(ra1, dec1, ra2, dec2, separation):
     coords1 = SkyCoord(ra=ra1, dec=dec1, frame='icrs')    
     coords2 = SkyCoord(ra=ra2, dec=dec2, frame='icrs') 
     index_list_all, sep2d, _ = match_coordinates_sky(coords1, coords2, nthneighbor=1)
@@ -98,6 +99,15 @@ def cross_match(ra1, dec1, ra2, dec2, separation):
     # index_list_all has shape coords1, so the locations of the close matches are where in coords1
     # the matches are
     index_list_1in2 = np.where(idx_close)[0]
+    return index_list_1in2, index_list_2in1
+
+
+# Cross match function using astropy
+def cross_match(ra1, dec1, ra2, dec2, separation):
+    coords1 = SkyCoord(ra=ra1, dec=dec1, frame='icrs')    
+    coords2 = SkyCoord(ra=ra2, dec=dec2, frame='icrs') 
+    cross = search_around_sky(coords1, coords2, separation) 
+    index_list_1in2, index_list_2in1 = cross[0], cross[1] 
     return index_list_1in2, index_list_2in1
 
 
@@ -272,7 +282,7 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
     return newcmap
 
 
-def split_train_val_test(random_ints, N_tot=None, frac_train=0.70, frac_val=0.15, frac_test=0.15):
+def split_train_val_test_idxs(random_ints, N_tot=None, frac_train=0.70, frac_val=0.15, frac_test=0.15):
 
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
@@ -286,3 +296,112 @@ def split_train_val_test(random_ints, N_tot=None, frac_train=0.70, frac_val=0.15
     idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
 
     return idx_train, idx_val, idx_test
+
+
+def split_train_val_test(random_ints, N_tot=None, frac_train=None, frac_val=None, frac_test=None):
+
+    if frac_test is None:
+        frac_test = 1.0-frac_train-frac_val
+    if frac_train is None:
+        frac_train = 1.0-frac_val-frac_test
+    if frac_val is None:
+        frac_val = 1.0-frac_train-frac_test
+
+    tol = 1e-6
+    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
+    if N_tot is None:
+        N_tot = len(random_ints)
+    int_train = int(frac_train*N_tot)
+    int_test = int((1-frac_test)*N_tot)
+
+    i_train = random_ints < int_train
+    i_val = (random_ints >= int_train) & (random_ints < int_test)
+    i_test = random_ints >= int_test
+
+    return i_train, i_val, i_test
+
+
+def get_table_with_necessary(tab, col_names_necessary=None):
+
+    if col_names_necessary is None:
+        col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                               'mag_w1_vg', 'mag_w2_vg', 'redshift_qsoc']
+    cols_necessary = []
+    masks_necessary = []
+    for col_name in col_names_necessary:
+        cols_necessary.append(tab[col_name])
+        masks_necessary.append(tab.mask[col_name])
+    cols_necessary = np.array(cols_necessary).T
+    masks_necessary = np.array(masks_necessary).T
+    i_finite = np.all(np.isfinite(cols_necessary), axis=1)
+    i_unmasked = np.all(~masks_necessary, axis=1)
+    i_has_necessary = i_finite & i_unmasked
+    print(f"N with necessary data: {np.sum(i_has_necessary)} ({np.sum(i_has_necessary)/len(i_has_necessary):.3f})")
+    return tab[i_has_necessary]
+
+
+### purity and completeness ###
+
+def confusion_matrix(C_pred, C_true, labels, priors=None, class_fracs=None):
+
+    C_pred = np.array(list(C_pred))
+    C_true = np.array(list(C_true))
+
+    N_classes = len(labels)
+    conf_mat = np.empty((N_classes, N_classes))
+    for i in range(N_classes):
+        for j in range(N_classes):
+            conf_mat[i, j] = np.sum((C_true==labels[i]) & (C_pred==labels[j]))
+    
+    if priors is not None and class_fracs is None:
+        assert len(priors)==N_classes
+        priors_norm = priors/np.sum(priors)
+        for i in range(N_classes):
+            conf_mat[i] *= priors_norm[i]
+    
+    if class_fracs is not None:
+        assert len(class_fracs)==N_classes
+        if priors is None:
+            priors = np.ones(N_classes)
+        priors_norm = priors/np.sum(priors)      
+        class_fracs_norm = class_fracs/np.sum(class_fracs)
+        
+        denominator = np.sum(priors_norm/class_fracs_norm)
+        lambdas = priors_norm/class_fracs_norm * 1/denominator
+        for i in range(N_classes):
+            conf_mat[i] *= lambdas[i]   
+    
+    return conf_mat
+
+def N_FP(conf_mat, class_labels, label='q'):
+    i = class_labels.index(label)
+    FP = np.sum([conf_mat[j,i] for j in range(len(class_labels)) if j!=i])
+    return FP
+
+def N_FN(conf_mat, class_labels, label='q'):
+    i = class_labels.index(label)
+    FN = np.sum([conf_mat[i,j] for j in range(len(class_labels)) if j!=i])
+    return FN
+
+def purity(conf_mat, class_labels, label='q'):
+    i = class_labels.index(label)
+    TP = conf_mat[i,i]
+    FP = np.sum([conf_mat[j,i] for j in range(len(class_labels)) if j!=i])
+    return TP/(TP+FP)
+
+def completeness(conf_mat, class_labels, label='q'):
+    i = class_labels.index(label)
+    TP = conf_mat[i,i]
+    FN = np.sum([conf_mat[i,j] for j in range(len(class_labels)) if j!=i])
+    return TP/(TP+FN)
+
+# assumes all s_ids_pred_target are in target class (bc we're labeling all of our catalog 'quasars')
+def get_classes(s_ids_pred_target, s_ids_valid, c_valid, target='q'):
+    s_ids_pred_target = np.array(s_ids_pred_target)
+    # Get which sources in validation set are in the predicted catalog
+    i_in_pred = np.isin(s_ids_valid, s_ids_pred_target)
+    print(np.sum(i_in_pred))
+    # The predicted catalog is all targets; non-targets are other ('o')
+    c_pred = np.full(len(c_valid), 'o')
+    c_pred[i_in_pred] = target
+    return c_pred

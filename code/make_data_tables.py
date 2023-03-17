@@ -1,6 +1,6 @@
 import numpy as np
 
-from astropy.table import Table, join
+from astropy.table import Table, join, vstack
 from astropy import units as u
 
 import utils
@@ -8,14 +8,19 @@ import utils
 
 def main():
     overwrite = True
+    #gaia_candidates_plus_info(overwrite=overwrite)
+    #gaia_candidates_xunwise_good(overwrite=overwrite)
+    #make_labeled_table(overwrite=overwrite)
+
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
     #gaia_purer_sourceids(overwrite=overwrite)
 
-    #quasars_sdss_xgaia_good(overwrite=overwrite)
-    #galaxies_sdss_xgaia_good(overwrite=overwrite)
-    #stars_sdss_xgaia_good(overwrite=overwrite)
-    remove_duplicate_sources(overwrite=overwrite)
+    # quasars_sdss_xgaia_good(overwrite=overwrite)
+    # galaxies_sdss_xgaia_good(overwrite=overwrite)
+    # stars_sdss_xgaia_good(overwrite=overwrite)
+    # remove_duplicate_sources(overwrite=overwrite)
+    get_gaia_xsdssfootprint(overwrite=overwrite)
 
     #gaia_unwise_slim(overwrite=overwrite)
     #gaia_catwise_slim(overwrite=overwrite)
@@ -36,65 +41,6 @@ def main():
     # save_as_csv(tab_gaia, ['source_id', 'ra', 'dec'], fn_csv, overwrite=overwrite)
 
 
-def gaia_slim(overwrite=False):
-    # save names
-    fn_gaia_slim = '../data/gaia_slim.fits'
-   
-    # data paths 
-    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-
-    # Load data
-    print("Loading data")
-    tab_gaia = utils.load_table(fn_gaia)
-    print(tab_gaia.columns)
-
-    rng = np.random.default_rng(seed=42)
-    tab_gaia['rand_ints'] = rng.choice(range(len(tab_gaia)), size=len(tab_gaia), replace=False)
-
-    # Create and save
-    columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
-                        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-                        'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
-                        'w1mpro', 'w2mpro', 'allwise_oid',
-                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
-                        'parallax', 'parallax_error', 
-                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
-    tab_gaia_slim = save_slim_table(tab_gaia, columns_to_keep, fn_gaia_slim, overwrite=overwrite)
-
-
-def gaia_unwise_slim(overwrite=False):
-    # save names
-    fn_gaia_unwise_slim = '../data/gaia_unwise_slim.fits'
-   
-    # data paths 
-    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-
-    # Load data
-    print("Loading data")
-    tab_gaia = utils.load_table(fn_gaia)
-    print(tab_gaia.columns)
-
-    fn_xwise = '../data/gaia_candidates_unwise_nn.csv'
-    tab_xwise = Table.read(fn_xwise, format='csv')
-    tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
-    print(tab_xwise.columns)
-    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
-                          join_type='left')
-    print(tab_gaia_xwise.columns)
-
-    rng = np.random.default_rng(seed=42)
-    tab_gaia_xwise['rand_ints'] = rng.choice(range(len(tab_gaia_xwise)), size=len(tab_gaia_xwise), replace=False)
-
-    # Create and save
-    columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
-                        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-                        'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
-                        'mag_w1_vg', 'mag_w2_vg', 'unwise_objid',
-                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
-                        'parallax', 'parallax_error', 
-                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
-    tab_gaia_xwise_slim = save_slim_table(tab_gaia_xwise, columns_to_keep, fn_gaia_unwise_slim, overwrite=overwrite)
-
 
 def gaia_purer_sourceids(overwrite=False):
     fn_gaia_purer = '/scratch/ksf293/gaia-quasars-lss/data/gaia_purer.fits'
@@ -102,44 +48,6 @@ def gaia_purer_sourceids(overwrite=False):
     tab_gaia_purer = utils.load_table(fn_gaia_purer)
     tab_gaia_purer.keep_columns(['source_id'])
     tab_gaia_purer.write(fn_gaia_purer_sourceids, overwrite=overwrite)
-
-
-def gaia_catwise_slim(overwrite=False):
-    # save names
-    fn_gaia_unwise_slim = '../data/gaia_catwise_slim.fits'
-   
-    # data paths 
-    fn_gaia = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-
-    # Load data
-    print("Loading data")
-    tab_gaia = utils.load_table(fn_gaia)
-    print(tab_gaia.columns)
-
-    fn_xwise = '../data/gaia_candidates_catwise_nn.csv'
-    tab_xwise = Table.read(fn_xwise, format='csv')
-    print(tab_xwise.columns)
-    tab_xwise.keep_columns(['t1_source_id', 'source_id', 'w1mag', 'w2mag'])
-    tab_xwise.rename_column('source_id', 'catwise_source_id')
-    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
-                          join_type='left')
-    print(tab_gaia_xwise.columns)
-
-    rng = np.random.default_rng(seed=42)
-    tab_gaia_xwise['rand_ints'] = rng.choice(range(len(tab_gaia_xwise)), size=len(tab_gaia_xwise), replace=False)
-
-    # Create and save
-    columns_to_keep = ['source_id', 'ra', 'dec', 'l', 'b', 'redshift_qsoc', 'ebv', 'A_v',
-                        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-                        'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2',
-                        'w1mag', 'w2mag', 'catwise_source_id',
-                        'redshift_qsoc_lower','redshift_qsoc_upper','zscore_qsoc','flags_qsoc',
-                        'parallax', 'parallax_error', 
-                        'pm', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error', 'rand_ints']
-    tab_gaia_xwise_slim = save_slim_table(tab_gaia_xwise, columns_to_keep, fn_gaia_unwise_slim, 
-                                          w1_name='w1mag', w2_name='w2mag', overwrite=overwrite)
-
-
 
 
 def gaia_clean(overwrite=False):
@@ -155,13 +63,7 @@ def gaia_clean(overwrite=False):
     print("Cutting sources without all necessary data (colors and QSOC redshifts)")
     # TODO is there a reason i shouldnt be cutting on QSOC redshift here? or having g,bp,rp,w1,w2?
     col_names_necessary = ['redshift_qsoc', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
-    cols_necessary = []
-    for col_name in col_names_necessary:
-        cols_necessary.append(tab_gaia[col_name])
-    cols_necessary = np.array(cols_necessary).T
-    i_has_necessary = np.all(np.isfinite(cols_necessary), axis=1)
-    print(f"Has necessary color data: {np.sum(i_has_necessary)} ({np.sum(i_has_necessary)/len(i_has_necessary):.3f})")
-    tab_gaia_nec = tab_gaia[i_has_necessary]
+    tab_gaia_nec = get_table_with_necessary(tab_gaia)
 
     print("Making color cuts")
     color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
@@ -192,59 +94,6 @@ def sdss_slim(overwrite=False):
     save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
 
 
-def gaia_slim_xsdss(fn_gaia_slim, fn_gaia_slim_xsdss, overwrite=False):
-
-    #fn_gaia_slim_xsdss='../data/gaia_slim_xsdss.fits'
-    
-    # Load data
-    print("Loading gaia data")
-    #fn_gaia_slim = '../data/gaia_slim.fits'
-    tab_gaia = utils.load_table(fn_gaia_slim)
-    print('N_gaia:', len(tab_gaia))
-
-    print("Load in SDSS data")
-    fn_sdss_slim = '../data/sdss_slim.fits'
-    tab_sdss = utils.load_table(fn_sdss_slim)
-    print(f"Number of SDSS QSOs: {len(tab_sdss)}")
-
-
-    # Clean out super low redshift SDSS objects, and ones with bad redshifts
-    # TODO: double check if should be doing this
-    z_min = 0.01 #magic #hyperparameter
-    redshift_key = 'Z'
-    idx_zgood = utils.redshift_cut_index(tab_sdss, z_min, redshift_key)
-    tab_sdss = tab_sdss[idx_zgood]
-
-    # https://www.sdss4.org/dr16/algorithms/bitmasks/#ZWARNING
-    idx_zwarn0 = tab_sdss['ZWARNING']==0
-    tab_sdss = tab_sdss[idx_zwarn0]
-    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss)}")
-
-
-    # Cross-match
-    print("Performing cross-match")
-    separation = 1*u.arcsec
-    index_list_gaiaINsdss, index_list_sdssINgaia = utils.cross_match(
-                                           tab_gaia['ra'], tab_gaia['dec'],
-                                           tab_sdss['RA']*u.degree, tab_sdss['DEC']*u.degree,
-                                           separation=separation)
-
-    print("N_gaiaINsdss:", len(index_list_gaiaINsdss))
-    print("N_sdssINgaia:", len(index_list_sdssINgaia))
-                               
-    # check this line!
-    sdss_column_names = ['SDSS_NAME', 'OBJID', 'THING_ID', 'RA', 'DEC', 'Z']
-    for sdss_column_name in sdss_column_names:
-        column_name = 'sdss_'+sdss_column_name
-        column = np.full(len(tab_gaia), np.nan)
-        # check this line!
-        column[index_list_gaiaINsdss] = tab_sdss[index_list_sdssINgaia]['Z']
-        tab_gaia[column_name] = column 
-
-    print("done, saving!")
-    tab_gaia.write(fn_gaia_slim_xsdss, overwrite=overwrite)
-
-
 def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
                                 G_max=20.5, overwrite=False):
 
@@ -264,13 +113,73 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
     join_and_save(tab_gaia, tab_spz, fn_gaia_withspz, overwrite=overwrite)
 
 
+def add_randints_column(tab):
+    rng = np.random.default_rng(seed=42)
+    tab['rand_ints'] = rng.choice(range(len(tab)), size=len(tab), replace=False)
+
+
+def gaia_candidates_plus_info(overwrite=False):
+
+    # save to:
+    fn_gaia_plus = '../data/gaia_candidates_plus.fits.gz'
+
+    fn_gaia = '../data/gaia_candidates.fits.gz'
+    tab_gaia = utils.load_table(fn_gaia)
+
+    utils.add_ebv(tab_gaia)
+    Rv = 3.1
+    Av = Rv*tab_gaia['ebv']
+    tab_gaia.add_column(Av, name='A_v')
+
+    pm = np.sqrt(tab_gaia['pmra']**2 + tab_gaia['pmdec']**2)
+    tab_gaia.add_column(pm, name='pm')
+
+    add_randints_column(tab_gaia)
+
+    tab_gaia.write(fn_gaia_plus, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gaia)} objects to {fn_gaia_plus}")
+
+
+def gaia_candidates_xunwise_good(overwrite=False):
+
+    # good will have wise in it but contain all rows.
+    fn_gaia_xwise = '../data/gaia_candidates_wnec.fits'
+
+    # data paths 
+    fn_gaia = '../data/gaia_candidates_plus.fits.gz'
+    fn_xwise = '../data/gaia_candidates_xunwise_all.csv'
+
+    # Load data
+    print("Loading data")
+    tab_gaia = utils.load_table(fn_gaia)
+    print(tab_gaia.columns)
+    tab_xwise = Table.read(fn_xwise, format='csv')
+    print(tab_xwise.columns)
+
+    tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
+    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
+                          join_type='left')
+    tab_gaia_xwise.remove_column('t1_source_id')                  
+    print(tab_gaia_xwise.columns)
+
+    # Require finite photometry and redshift_qsoc
+    col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                           'mag_w1_vg', 'mag_w2_vg', 'redshift_qsoc']
+    tab_gaia_xwise = utils.get_table_with_necessary(tab_gaia_xwise, col_names_necessary=col_names_necessary)
+
+    add_randints_column(tab_gaia_xwise)
+
+    tab_gaia_xwise.write(fn_gaia_xwise, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gaia_xwise)} objects to {fn_gaia_xwise}")
+
+
+
 def quasars_sdss_xgaia_good(overwrite=False):
 
-    #fn_sdss_xgaia_good = '../data/sdss_xgaia_wise_good.fits.gz'
     fn_sdss_xgaia_good = '../data/quasars_sdss_xgaia_xunwise_good.fits'
 
     print("Load in SDSS xgaia data")
-    fn_sdss_xgaia = '../data/quasars_sdss_xgaia_xunwise.csv'
+    fn_sdss_xgaia = '../data/quasars_sdss_xgaia_xunwise_all.csv'
     tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
     tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
@@ -311,7 +220,7 @@ def galaxies_sdss_xgaia_good(overwrite=False):
     fn_gals_sdss_xgaia_good = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
 
     print("Load in SDSS xgaia data")
-    fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_xunwise.csv'
+    fn_gals_sdss_xgaia = '../data/galaxies_sdss_xgaia_xunwise_all.csv'
     tab_gals_sdss_xgaia = utils.load_table(fn_gals_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia Galaxies: {len(tab_gals_sdss_xgaia)}")
     print(tab_gals_sdss_xgaia.columns)
@@ -348,7 +257,7 @@ def stars_sdss_xgaia_good(overwrite=False):
     fn_stars_sdss_xgaia_good = '../data/stars_sdss_xgaia_xunwise_good.fits'
 
     print("Load in SDSS xgaia data")
-    fn_stars_sdss_xgaia = '../data/stars_sdss_xgaia_xunwise.csv'
+    fn_stars_sdss_xgaia = '../data/stars_sdss_xgaia_xunwise_all.csv'
     tab_stars_sdss_xgaia = utils.load_table(fn_stars_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia Stars: {len(tab_stars_sdss_xgaia)}")
     print(tab_stars_sdss_xgaia.columns)
@@ -402,7 +311,112 @@ def remove_duplicate_sources(overwrite=False):
         fn_save = fns[i].split('.fits')[0] + '_nodup.fits'
         print(f"Saving to {fn_save}")
         tab.write(fn_save, overwrite=overwrite)        
-    
+
+
+
+def make_labeled_table(overwrite=False):
+
+    # save to:
+    fn_labeled = '../data/labeled_wnec.fits'
+
+    # Requiring labeled data to be in set we will apply to, this wnec one:
+    fn_gwnec = '../data/gaia_candidates_wnec.fits'
+    tab_gwnec = utils.load_table(fn_gwnec)
+
+    # Our labels come from SDSS
+    tab_squasars = utils.load_table(f'../data/quasars_sdss_xgaia_xunwise_good_nodup.fits')
+    print(f"Number of SDSS quasars: {len(tab_squasars)}")
+
+    tab_sstars = utils.load_table(f'../data/stars_sdss_xgaia_xunwise_good_nodup.fits')
+    print(f"Number of SDSS stars: {len(tab_sstars)}")
+
+    tab_sgals = utils.load_table(f'../data/galaxies_sdss_xgaia_xunwise_good_nodup.fits')
+    print(f"Number of SDSS galaxies: {len(tab_sgals)}")
+
+    ## Stack into single table & arrays
+    class_labels = ['q', 's', 'g']
+    tab_squasars['class'] = 'q'
+    tab_sstars['class'] = 's'
+    tab_sgals['class'] = 'g'
+
+    cols_tokeep = ['source_id', 'class', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
+                'mag_w1_vg', 'mag_w2_vg']
+
+    tab_squasars.keep_columns(cols_tokeep)
+    tab_sstars.keep_columns(cols_tokeep)
+    tab_sgals.keep_columns(cols_tokeep)
+
+    tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals], metadata_conflicts='silent')
+
+    # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 
+    # cross-matches :/ could have just crossmatched SDSS data to QSO sample. 
+    # We matched the SDSS samples on their gaia match's RA and dec, so the wise properties 
+    # are guaranteed to be the same as the gaia candidates 
+    i_inwnec = np.isin(tab_labeled['source_id'], tab_gwnec['source_id'])
+    print(f"{np.sum(i_inwnec)} of labeled data in wnec sample (out of {len(tab_labeled)}); keeping those only")
+    tab_labeled = tab_labeled[i_inwnec]
+
+    # The ones that make the i_inwnec cut will necessarily already have all the necessary data 
+    # so don't need to do this
+    # Require finite values of colors, and have     
+    # col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+    #                        'mag_w1_vg', 'mag_w2_vg']
+    # tab_labeled = utils.get_table_with_necessary(tab_stars_sdss_xgaia, col_names_necessary=col_names_necessary)
+
+    add_randints_column(tab_labeled)
+
+    #i_train, i_val, i_test = split_train_val_test(random_ints, frac_train=0.5, frac_test=0.25, frac_val=0.25)
+    #tab_labeled['']
+
+    tab_labeled.write(fn_labeled, overwrite=overwrite)
+
+
+
+def get_gaia_xsdssfootprint(overwrite=False):
+
+    # save to:
+    fn_xsdssfootprint = '../data/gaia_candidates_xsdssfootprint.fits'
+
+    print("Loading tables")
+    # sdss quasars (should this be only ones in wnec or something??)
+    fn_squasars = '../data/sdss_slim.fits'
+    tab_squasars = utils.load_table(fn_squasars)
+
+    # full gaia candidates:
+    fn_gcand = '../data/gaia_candidates_plus.fits.gz'
+    tab_gcand = utils.load_table(fn_gcand)
+
+    separation = 2*u.arcmin
+
+    # idx_small = np.arange(75000)
+    # ra_squasars = tab_squasars['RA'][idx_small]*u.deg
+    # dec_squasars = tab_squasars['DEC'][idx_small]*u.deg
+
+    ra_squasars = tab_squasars['RA']*u.deg
+    dec_squasars = tab_squasars['DEC']*u.deg
+    ra_gcand = tab_gcand['ra']
+    dec_gcand = tab_gcand['dec']
+
+    print("Performing cross-match")
+    # for decontamination, don't care about star vs gal, label all as other 'o'
+    index_list_1in2, index_list_2in1 = utils.cross_match(ra_squasars, dec_squasars,
+                                                         ra_gcand, dec_gcand,
+                                                         separation=separation)
+
+    index_list_2in1_unique = np.unique(index_list_2in1)
+    print(f'Found {len(index_list_2in1)} Gaia quasar candidates in range of SDSS quasars')
+    print(f'{len(index_list_2in1_unique)} of these are unique')
+
+    tab_gcand_xsdssfootprint = tab_gcand[index_list_2in1_unique]
+
+    tab_gcand_xsdssfootprint.write(fn_xsdssfootprint, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gcand_xsdssfootprint)} objects to {fn_xsdssfootprint}")
+
+
+
+def make_labeled_spz_set():
+    pass
+
 
 
 def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False, 

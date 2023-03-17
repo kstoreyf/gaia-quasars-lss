@@ -4,13 +4,13 @@
 ##SBATCH --job-name=gen_rand_prob_G20.0_10x
 ##SBATCH --job-name=lensing_qso_cross_G20_NSIDE256_ratio
 ##SBATCH --job-name=xi_G20_bw4_jack12
-#SBATCH --job-name=make_table_gaia_catwise
+#SBATCH --job-name=make_table_gaia_xsdssfootprint
 ##SBATCH --job-name=sel_func_G20.0_NSIDE64
 ##SBATCH --job-name=animate_gaia_G20.4_Nall_mp4
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=30GB
+#SBATCH --mem=60GB
 #SBATCH --time=24:00:00
 
 cd ~
