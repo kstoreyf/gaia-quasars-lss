@@ -40,9 +40,9 @@ def main():
 
     y_valid_pred = model(X_train, y_train, X_valid, class_labels=class_labels, fn_model=fn_model)
 
-    print("Baseline: take all to be quasars")
-    y_valid_baseline = ['q']*len(y_valid)
-    compute_metrics(y_valid_baseline, y_valid, class_labels)
+    # print("Baseline: take all to be quasars")
+    # y_valid_baseline = ['q']*len(y_valid)
+    # compute_metrics(y_valid_baseline, y_valid, class_labels)
 
     print("Results")
     compute_metrics(y_valid_pred, y_valid, class_labels)
@@ -86,24 +86,32 @@ def two_lines_eyeball(X_train, y_train, X_valid, fn_model=None):
 
 def two_lines(X_train, y_train, X_valid, class_labels=None, fn_model=None):
 
-    def objective(x):
-        print(x)
-        color_cuts = [[x[0], x[1], x[2]], [x[3], x[4], x[5]]]
-        idx_predq = utils.gw1_w1w2_cuts_index(X_train[:,0], X_train[:,1], color_cuts)
-        y_pred = np.full(X_train.shape[0], 'o')
-        y_pred[idx_predq] = 'q'
-        conf_mat = utils.confusion_matrix(y_pred, y_train, class_labels)
+    def loss(y_pred, y_true):
+        conf_mat = utils.confusion_matrix(y_pred, y_true, class_labels)
         #comp = utils.completeness(conf_mat, class_labels, label='q')
         fn = utils.N_FN(conf_mat, class_labels, label='q')
         fp = utils.N_FP(conf_mat, class_labels, label='q')
         #purity = utils.purity(conf_mat, class_labels, label='q')
-        # dumb but trying
-        return fp + fn
+        A = 0.5
+        return A*fn + fp
 
-    #p0 = [0., 1., 0.2, 1., 1., 2.9]
-    p0 = [0., 1., 0.5, 1., 1., 2.0]
-    result = minimize(objective, p0, method='L-BFGS-B')
+    def objective(x):
+        #print(x)
+        color_cuts = [[x[0], x[1], x[2]], [x[3], x[4], x[5]]]
+        idx_predq = utils.gw1_w1w2_cuts_index(X_train[:,0], X_train[:,1], color_cuts)
+        y_pred = np.full(X_train.shape[0], 'o')
+        y_pred[idx_predq] = 'q'
+        return loss(y_pred, y_train)
+
+    
+    p0 = [0., 1., 0.2, 1., 1., 2.9]
+    #p0 = [0., 1., 0.5, 1., 1., 2.0]
+    options = {'maxiter': 20}
+    #result = minimize(objective, p0, method='L-BFGS-B', tol=0.00001, options=options)
+    result = minimize(objective, p0, method='Powell', options=options)
     x = result['x']
+    print(result)
+    print(list(x))
     color_cuts = [[x[0], x[1], x[2]], [x[3], x[4], x[5]]]
     idx_predq = utils.gw1_w1w2_cuts_index(X_valid[:,0], X_valid[:,1], color_cuts)
     y_pred = np.full(X_valid.shape[0], 'o')

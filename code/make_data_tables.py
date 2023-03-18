@@ -348,6 +348,7 @@ def make_labeled_table(overwrite=False):
 
     tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals], metadata_conflicts='silent')
 
+    # only keep labeled data in our wnec sample
     # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 
     # cross-matches :/ could have just crossmatched SDSS data to QSO sample. 
     # We matched the SDSS samples on their gaia match's RA and dec, so the wise properties 
@@ -411,6 +412,12 @@ def get_gaia_xsdssfootprint(overwrite=False):
 
     tab_gcand_xsdssfootprint.write(fn_xsdssfootprint, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gcand_xsdssfootprint)} objects to {fn_xsdssfootprint}")
+
+
+def make_labeled_sdssfootprint_table():
+    fn_xsdssfootprint = '../data/gaia_candidates_xsdssfootprint.fits'
+    tab_gcand_xsdssfootprint = utils.load_table(fn_xsdssfootprint)
+    print(f"Number of Gaia quasar candidates in SDSS footprint: {len(tab_gcand_xsdssfootprint)}")
 
 
 
