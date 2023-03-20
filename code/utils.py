@@ -76,16 +76,13 @@ def gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts):
 
     # start with all
     idx_clean = np.full(len(g_w1), True)
-
     for cut in color_cuts:
         idx_colorcut = gw1_w1w2_cut_index(g_w1, w1_w2, cut)
-        idx_clean = idx_clean & idx_colorcut
-    
-    print(f'Fraction that make cuts: {np.sum(idx_clean)/len(idx_clean):.3f}')
+        idx_clean = idx_clean & idx_colorcut    
     return idx_clean
 
 def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
-    return cut[0] * g_w1 + cut[1] * w1_w2 > cut[2]
+    return cut[0]*g_w1 + cut[1]*w1_w2 > cut[2]
 
 
 # gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
@@ -321,11 +318,19 @@ def split_train_val_test(random_ints, N_tot=None, frac_train=None, frac_val=None
     return i_train, i_val, i_test
 
 
-def get_table_with_necessary(tab, col_names_necessary=None):
-
-    if col_names_necessary is None:
-        col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+def make_superset_cuts(tab):
+    col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
                                'mag_w1_vg', 'mag_w2_vg', 'redshift_qsoc']
+    tab = get_table_with_necessary(tab, col_names_necessary)
+    G_cut = 20.6
+    i_Gcut = tab['phot_g_mean_mag'] < G_cut
+    tab = tab[i_Gcut]
+    print(f"Removed {np.sum(~i_Gcut)} sources with G>={G_cut}")
+    return tab
+
+
+def get_table_with_necessary(tab, col_names_necessary):
+        
     cols_necessary = []
     masks_necessary = []
     for col_name in col_names_necessary:
@@ -372,6 +377,11 @@ def confusion_matrix(C_pred, C_true, labels, priors=None, class_fracs=None):
             conf_mat[i] *= lambdas[i]   
     
     return conf_mat
+
+def N_TP(conf_mat, class_labels, label='q'):
+    i = class_labels.index(label)
+    TP = conf_mat[i,i]
+    return TP
 
 def N_FP(conf_mat, class_labels, label='q'):
     i = class_labels.index(label)

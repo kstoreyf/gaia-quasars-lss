@@ -9,8 +9,8 @@ import utils
 def main():
     overwrite = True
     #gaia_candidates_plus_info(overwrite=overwrite)
-    #gaia_candidates_xunwise_good(overwrite=overwrite)
-    #make_labeled_table(overwrite=overwrite)
+    #gaia_candidates_superset(overwrite=overwrite)
+    gaia_candidates_clean(overwrite=overwrite)
 
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
@@ -20,7 +20,8 @@ def main():
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     # remove_duplicate_sources(overwrite=overwrite)
-    get_gaia_xsdssfootprint(overwrite=overwrite)
+    #make_labeled_table(overwrite=overwrite)
+    #get_gaia_xsdssfootprint(overwrite=overwrite)
 
     #gaia_unwise_slim(overwrite=overwrite)
     #gaia_catwise_slim(overwrite=overwrite)
@@ -140,10 +141,10 @@ def gaia_candidates_plus_info(overwrite=False):
     print(f"Wrote table with {len(tab_gaia)} objects to {fn_gaia_plus}")
 
 
-def gaia_candidates_xunwise_good(overwrite=False):
+def gaia_candidates_superset(overwrite=False):
 
     # good will have wise in it but contain all rows.
-    fn_gaia_xwise = '../data/gaia_candidates_wnec.fits'
+    fn_gsup = '../data/gaia_candidates_superset.fits'
 
     # data paths 
     fn_gaia = '../data/gaia_candidates_plus.fits.gz'
@@ -152,26 +153,50 @@ def gaia_candidates_xunwise_good(overwrite=False):
     # Load data
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
+    print(f"Original Gaia table: N={len(tab_gaia)}")
     print(tab_gaia.columns)
     tab_xwise = Table.read(fn_xwise, format='csv')
     print(tab_xwise.columns)
 
     tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
-    tab_gaia_xwise = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
+    tab_gsup = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
                           join_type='left')
-    tab_gaia_xwise.remove_column('t1_source_id')                  
-    print(tab_gaia_xwise.columns)
+    tab_gsup.remove_column('t1_source_id')                  
+    print(tab_gsup.columns)
 
-    # Require finite photometry and redshift_qsoc
-    col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-                           'mag_w1_vg', 'mag_w2_vg', 'redshift_qsoc']
-    tab_gaia_xwise = utils.get_table_with_necessary(tab_gaia_xwise, col_names_necessary=col_names_necessary)
+    # Require finite photometry, redshift_qsoc, and makes G cut
+    tab_gsup = utils.make_superset_cuts(tab_gsup)
 
-    add_randints_column(tab_gaia_xwise)
+    add_randints_column(tab_gsup)
 
-    tab_gaia_xwise.write(fn_gaia_xwise, overwrite=overwrite)
-    print(f"Wrote table with {len(tab_gaia_xwise)} objects to {fn_gaia_xwise}")
+    tab_gsup.write(fn_gsup, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gsup)} objects to {fn_gsup}")
 
+
+def gaia_candidates_clean(overwrite=False):
+    
+    fn_gaia_clean = '../data/gaia_candidates_clean.fits'
+
+    fn_gaia = '../data/gaia_candidates_superset.fits'
+    # Load data
+    print("Loading data")
+    tab_gaia = utils.load_table(fn_gaia)
+    print('N_gaia:', len(tab_gaia))
+
+    fn_model = f'../data/decontamination_models/model_2lines_straight_lambda0.1.npy'
+    color_cuts = np.loadtxt(fn_model)
+
+    print("Making color cuts")
+    g_w1 = tab_gaia['phot_g_mean_mag'] - tab_gaia['mag_w1_vg']
+    w1_w2 = tab_gaia['mag_w1_vg'] - tab_gaia['mag_w2_vg']
+    idx_clean = utils.gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts) 
+    tab_gaia_clean = tab_gaia[idx_clean]
+
+    rng = np.random.default_rng(seed=42)
+    tab_gaia_clean['rand_ints'] = rng.choice(range(len(tab_gaia_clean)), size=len(tab_gaia_clean), replace=False)
+
+    print("N_clean:", len(tab_gaia_clean))
+    tab_gaia_clean.write(fn_gaia_clean, overwrite=overwrite)
 
 
 def quasars_sdss_xgaia_good(overwrite=False):
@@ -317,11 +342,11 @@ def remove_duplicate_sources(overwrite=False):
 def make_labeled_table(overwrite=False):
 
     # save to:
-    fn_labeled = '../data/labeled_wnec.fits'
+    fn_labeled = '../data/labeled_xsuperset.fits'
 
     # Requiring labeled data to be in set we will apply to, this wnec one:
-    fn_gwnec = '../data/gaia_candidates_wnec.fits'
-    tab_gwnec = utils.load_table(fn_gwnec)
+    fn_gsup = '../data/gaia_candidates_superset.fits'
+    tab_gsup = utils.load_table(fn_gsup)
 
     # Our labels come from SDSS
     tab_squasars = utils.load_table(f'../data/quasars_sdss_xgaia_xunwise_good_nodup.fits')
@@ -348,26 +373,16 @@ def make_labeled_table(overwrite=False):
 
     tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals], metadata_conflicts='silent')
 
-    # only keep labeled data in our wnec sample
+    # Only keep labeled data that are also in our wnec sample
     # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 
     # cross-matches :/ could have just crossmatched SDSS data to QSO sample. 
     # We matched the SDSS samples on their gaia match's RA and dec, so the wise properties 
     # are guaranteed to be the same as the gaia candidates 
-    i_inwnec = np.isin(tab_labeled['source_id'], tab_gwnec['source_id'])
-    print(f"{np.sum(i_inwnec)} of labeled data in wnec sample (out of {len(tab_labeled)}); keeping those only")
-    tab_labeled = tab_labeled[i_inwnec]
-
-    # The ones that make the i_inwnec cut will necessarily already have all the necessary data 
-    # so don't need to do this
-    # Require finite values of colors, and have     
-    # col_names_necessary = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-    #                        'mag_w1_vg', 'mag_w2_vg']
-    # tab_labeled = utils.get_table_with_necessary(tab_stars_sdss_xgaia, col_names_necessary=col_names_necessary)
+    i_in_gsup = np.isin(tab_labeled['source_id'], tab_gsup['source_id'])
+    print(f"N={np.sum(i_in_gsup)} labeled sources are in superset (out of {len(tab_labeled)}); keeping those only")
+    tab_labeled = tab_labeled[i_in_gsup]
 
     add_randints_column(tab_labeled)
-
-    #i_train, i_val, i_test = split_train_val_test(random_ints, frac_train=0.5, frac_test=0.25, frac_val=0.25)
-    #tab_labeled['']
 
     tab_labeled.write(fn_labeled, overwrite=overwrite)
 
