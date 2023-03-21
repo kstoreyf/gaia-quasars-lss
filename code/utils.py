@@ -73,7 +73,6 @@ def add_gaia_wise_colors(tab, w1_name='mag_w1_vg', w2_name='mag_w2_vg'):
 
 # CHANGED from tab input to g_w1, w1_w2
 def gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts):
-
     # start with all
     idx_clean = np.full(len(g_w1), True)
     for cut in color_cuts:
@@ -83,6 +82,14 @@ def gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts):
 
 def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
     return cut[0]*g_w1 + cut[1]*w1_w2 > cut[2]
+
+def cuts_index(colors, cuts_min):
+    # start with all
+    i_clean = np.full(len(colors[0]), True)
+    for color, cut in zip(colors, cuts_min):
+        i_colorcut = color > cut
+        i_clean = i_clean & i_colorcut    
+    return i_clean
 
 
 # gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches

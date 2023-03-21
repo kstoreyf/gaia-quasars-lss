@@ -10,7 +10,7 @@ def main():
     overwrite = True
     #gaia_candidates_plus_info(overwrite=overwrite)
     #gaia_candidates_superset(overwrite=overwrite)
-    gaia_candidates_clean(overwrite=overwrite)
+    ###gaia_candidates_clean(overwrite=overwrite)
 
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
@@ -20,7 +20,7 @@ def main():
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     # remove_duplicate_sources(overwrite=overwrite)
-    #make_labeled_table(overwrite=overwrite)
+    make_labeled_table(overwrite=overwrite)
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
     #gaia_unwise_slim(overwrite=overwrite)
@@ -49,34 +49,6 @@ def gaia_purer_sourceids(overwrite=False):
     tab_gaia_purer = utils.load_table(fn_gaia_purer)
     tab_gaia_purer.keep_columns(['source_id'])
     tab_gaia_purer.write(fn_gaia_purer_sourceids, overwrite=overwrite)
-
-
-def gaia_clean(overwrite=False):
-    
-    fn_gaia_clean = '../data/gaia_clean.fits'
-
-    fn_gaia = '../data/gaia_slim_xsdss.fits'
-    # Load data
-    print("Loading data")
-    tab_gaia = utils.load_table(fn_gaia)
-    print('N_gaia:', len(tab_gaia))
-
-    print("Cutting sources without all necessary data (colors and QSOC redshifts)")
-    # TODO is there a reason i shouldnt be cutting on QSOC redshift here? or having g,bp,rp,w1,w2?
-    col_names_necessary = ['redshift_qsoc', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'w1mpro', 'w2mpro']
-    tab_gaia_nec = get_table_with_necessary(tab_gaia)
-
-    print("Making color cuts")
-    color_cuts = [[0., 1., 0.2], [1., 1., 2.9]]
-    idx_clean_gaia = utils.gw1_w1w2_cuts_index(tab_gaia_nec, color_cuts) 
-    tab_gaia_clean = tab_gaia_nec[idx_clean_gaia]
-    print(len(tab_gaia_clean))
-
-    rng = np.random.default_rng(seed=42)
-    tab_gaia_clean['rand_ints_clean'] = rng.choice(range(len(tab_gaia_clean)), size=len(tab_gaia_clean), replace=False)
-
-    print("N_clean:", len(tab_gaia_clean))
-    tab_gaia_clean.write(fn_gaia_clean, overwrite=overwrite)
 
 
 def sdss_slim(overwrite=False):
@@ -154,25 +126,29 @@ def gaia_candidates_superset(overwrite=False):
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
     print(f"Original Gaia table: N={len(tab_gaia)}")
-    print(tab_gaia.columns)
+    print('Gaia plus columns:', tab_gaia.columns)
     tab_xwise = Table.read(fn_xwise, format='csv')
-    print(tab_xwise.columns)
+    print('unWISE xmatch columns:', tab_xwise.columns)
 
     tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
     tab_gsup = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
                           join_type='left')
     tab_gsup.remove_column('t1_source_id')                  
-    print(tab_gsup.columns)
 
     # Require finite photometry, redshift_qsoc, and makes G cut
     tab_gsup = utils.make_superset_cuts(tab_gsup)
 
+    # Compute the color differences
+    utils.add_gaia_wise_colors(tab_gsup)
+
     add_randints_column(tab_gsup)
+    print('Final superset columns:', tab_gsup.columns)
 
     tab_gsup.write(fn_gsup, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gsup)} objects to {fn_gsup}")
 
 
+# MOVED TO DECONTAMINATE
 def gaia_candidates_clean(overwrite=False):
     
     fn_gaia_clean = '../data/gaia_candidates_clean.fits'
@@ -342,7 +318,7 @@ def remove_duplicate_sources(overwrite=False):
 def make_labeled_table(overwrite=False):
 
     # save to:
-    fn_labeled = '../data/labeled_xsuperset.fits'
+    fn_labeled = '../data/labeled_superset.fits'
 
     # Requiring labeled data to be in set we will apply to, this wnec one:
     fn_gsup = '../data/gaia_candidates_superset.fits'
@@ -364,8 +340,7 @@ def make_labeled_table(overwrite=False):
     tab_sstars['class'] = 's'
     tab_sgals['class'] = 'g'
 
-    cols_tokeep = ['source_id', 'class', 'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
-                'mag_w1_vg', 'mag_w2_vg']
+    cols_tokeep = ['source_id', 'class']
 
     tab_squasars.keep_columns(cols_tokeep)
     tab_sstars.keep_columns(cols_tokeep)
@@ -376,15 +351,15 @@ def make_labeled_table(overwrite=False):
     # Only keep labeled data that are also in our wnec sample
     # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 
     # cross-matches :/ could have just crossmatched SDSS data to QSO sample. 
+    # (Still useful for plotting so it's ok!)
     # We matched the SDSS samples on their gaia match's RA and dec, so the wise properties 
     # are guaranteed to be the same as the gaia candidates 
-    i_in_gsup = np.isin(tab_labeled['source_id'], tab_gsup['source_id'])
-    print(f"N={np.sum(i_in_gsup)} labeled sources are in superset (out of {len(tab_labeled)}); keeping those only")
-    tab_labeled = tab_labeled[i_in_gsup]
+    tab_labeled_sup = join(tab_labeled, tab_gsup, join_type='inner', keys='source_id')
+    print(f"N={len(tab_labeled_sup)} labeled sources are in superset (out of {len(tab_labeled)}); keeping those only")
 
-    add_randints_column(tab_labeled)
+    add_randints_column(tab_labeled_sup)
 
-    tab_labeled.write(fn_labeled, overwrite=overwrite)
+    tab_labeled_sup.write(fn_labeled, overwrite=overwrite)
 
 
 
