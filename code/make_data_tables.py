@@ -20,7 +20,9 @@ def main():
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     # remove_duplicate_sources(overwrite=overwrite)
-    make_labeled_table(overwrite=overwrite)
+    #make_labeled_table(overwrite=overwrite)
+    make_quasars_sdss_clean(overwrite=overwrite)
+
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
     #gaia_unwise_slim(overwrite=overwrite)
@@ -335,7 +337,6 @@ def make_labeled_table(overwrite=False):
     print(f"Number of SDSS galaxies: {len(tab_sgals)}")
 
     ## Stack into single table & arrays
-    class_labels = ['q', 's', 'g']
     tab_squasars['class'] = 'q'
     tab_sstars['class'] = 's'
     tab_sgals['class'] = 'g'
@@ -360,6 +361,28 @@ def make_labeled_table(overwrite=False):
     add_randints_column(tab_labeled_sup)
 
     tab_labeled_sup.write(fn_labeled, overwrite=overwrite)
+
+
+def make_quasars_sdss_clean(overwrite=False):
+
+    fn_sdss_clean = '../data/quasars_sdss_clean.fits'
+
+    print("Load in data")
+    
+    fn_sdss = '../data/quasars_sdss_xgaia_xunwise_good_nodup.fits'
+    tab_sdss = utils.load_table(fn_sdss)
+
+    fn_clean = '../data/gaia_candidates_clean.fits'
+    tab_clean = utils.load_table(fn_clean)
+
+    tab_sdss.keep_columns(['source_id', 'z_sdss'])
+    tab_sdss_clean = join(tab_sdss, tab_clean, join_type='inner', keys='source_id')
+    print(f"SDSS quasars in clean Gaia sample: N={len(tab_sdss_clean)}")
+    print(tab_sdss_clean.columns)
+    
+    add_randints_column(tab_sdss_clean)
+
+    tab_sdss_clean.write(fn_sdss_clean, overwrite=overwrite)
 
 
 

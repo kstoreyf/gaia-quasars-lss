@@ -38,21 +38,6 @@ def jackknife_mean_var(values):
     return mean, var
 
 
-def split_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
-
-    tol = 1e-6
-    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
-    N_halos = len(random_ints)
-    int_train = int(frac_train*N_halos)
-    int_test = int((1-frac_test)*N_halos)
-
-    idx_train = np.where(random_ints < int_train)[0]
-    idx_test = np.where(random_ints >= int_test)[0]
-    idx_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
-
-    return idx_train, idx_val, idx_test
-
-
 def get_fraction_recovered(Y_true, Y_hat, dz):
         return np.sum(np.abs(Y_hat - Y_true)/(1 + Y_true) < dz) / len(Y_true)
 
