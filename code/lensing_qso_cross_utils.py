@@ -47,6 +47,21 @@ def define_binning(lmin,lmax,delta_b,nside,weighting='ivar'):
 
     return b
 
+def get_custom_binning(delta_b=20,delta_b_high_l=50,lmax_transition=100,nside=256,lmax=767):
+    lmin_low_ells = np.arange(0,lmax_transition,delta_b)
+    lmax_low_ells = lmin_low_ells + delta_b
+    lmin_low_ells[0]=2
+    lmin_high_ells = np.arange(lmax_transition,lmax-delta_b_high_l,delta_b_high_l)
+    lmax_high_ells = lmin_high_ells+delta_b_high_l
+    lmax_high_ells[-1]=lmax
+    
+    lmins = np.append(lmin_low_ells,lmin_high_ells)
+    lmaxs = np.append(lmax_low_ells,lmax_high_ells)
+    
+    binning = define_binning(lmins,lmaxs,delta_b=delta_b,nside=nside,weighting='ivar')
+    return binning
+
+
 def compute_master(f_a, f_b, wsp):
     # Compute the power spectrum (a la anafast) of the masked fields
     # Note that we only use n_iter=0 here to speed up the computation,
