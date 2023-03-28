@@ -14,13 +14,12 @@ def main():
 
     map_names = ['dust', 'stars', 'm10']
     NSIDE = 64
-    #G_max = 19.9
-    #G_max = 20.4
-    G_max = 20.0
+    G_max = 20.5
+    #G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_testing.fits"
+    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.fits"
     overwrite = True
 
     print("Loading data")
