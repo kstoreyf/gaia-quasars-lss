@@ -32,24 +32,25 @@ def main():
     #     fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}.fits'
     #     combine_with_gaia_redshifts(fn_spz)
 
-    run()
-    # fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_hgboost_scale.fits'
-    # combine_with_gaia_redshifts(fn_spz_labeled)
-    # fn_spz = f'../data/redshift_estimates/redshifts_spz_hgboost_scale.fits'
-    # combine_with_gaia_redshifts(fn_spz)
+    K = 11
+    #run(K=K)
+    #fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_kNN_K{K}_2std.fits'
+    #combine_with_gaia_redshifts(fn_spz_labeled)
+    fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}_2std.fits'
+    combine_with_gaia_redshifts(fn_spz)
 
 
-def run(K=11):
+def run(K=27):
 
     rng = default_rng()
 
     mode = 'regression'
-    #redshift_estimator_name = 'kNN'
+    redshift_estimator_name = 'kNN'
     #redshift_estimator_name = 'hgboost'
-    redshift_estimator_name = 'xgboost'
+    #redshift_estimator_name = 'xgboost'
     #K = 31
     learning_rate = 0.005
-    apply_to_all = False
+    apply_to_all = True
     overwrite_model = True
     overwrite_table = True
     save_tables = True
@@ -57,18 +58,18 @@ def run(K=11):
 
     # include prev?
     #fn_prev_estimate = f'../data/redshift_estimates/redshifts_spz_labeled_hgboost_scale_wphot.fits'
-    #prev_tag = None
+    prev_tag = None
     #prev_tag = '_hgboost_scale_wphot'
-    prev_tag = '_kNN_K27'
+    #prev_tag = '_kNN_K27'
     #fn_prev_estimate = None
     prev_mode = 'add'
     spz_prev_name = 'redshift_spz_raw'
 
-    #save_tag_model = f'_K{K}'
+    save_tag_model = f'_K{K}_2std'
     #save_tag_model = f'_K{K}_prev_hgboost'
     #save_tag_model = f'_K{K}_resid'
     #save_tag_model = f'_scale_wphot'
-    save_tag_model = f'_scale_wphot_prev_kNN_K27'
+    #save_tag_model = f'_scale_wphot_prev_kNN_K27'
 
 
     # Save file names
@@ -211,6 +212,7 @@ def run(K=11):
             if apply_to_all:
                 Y_hat_gaia, sigma_z_gaia = redshift_estimator.predict(X_gaia)
        
+        print(sigma_z_gaia)
 
     else:
         raise ValueError("MODE NOT RECOGNIZED")
@@ -245,6 +247,7 @@ def run(K=11):
 
         tab_gaia['redshift_spz_raw'] = Y_hat_gaia
         tab_gaia['redshift_spz_err'] = sigma_z_gaia
+        print(tab_gaia['redshift_spz_err'])
         tab_gaia.write(fn_spz, overwrite=overwrite_table)
         print(f"Wrote specphotozs to {fn_spz}!")
 
@@ -302,6 +305,8 @@ def combine_with_gaia_redshifts(fn_spz):
             print(f"QSOC: {frac_recovered_qsoc:.3f}")
 
     tab_spz['redshift_spz'] = z_spz
+    print(tab_spz.columns)
+    print(tab_spz['redshift_spz_err'])
     tab_spz.write(fn_spz, overwrite=True)
     print(f"Added SPZ/Gaia smoothed redshifts to {fn_spz}")
 
@@ -455,6 +460,8 @@ class RedshiftEstimatorkNN(RedshiftEstimator):
         inds_nodist0[~idx_nearest_dist0] = inds[~idx_nearest_dist0,:-1]
         low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (2.5, 50, 97.5), axis=1)
         sigma_z = (up_z - low_z)/4
+        # low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (16, 50, 84), axis=1)
+        # sigma_z = 0.5*(up_z - low_z)
         return Y_hat, sigma_z
 
 

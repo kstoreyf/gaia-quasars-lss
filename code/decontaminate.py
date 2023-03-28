@@ -9,13 +9,13 @@ import utils
 
 
 def main():
-    #tag_decontam = '_mag0.1-0.01'
-    tag_decontam = '_mag0.1'
+    tag_decontam = '_mag0.1_lg1'
+    #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = True
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
 
-    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
+    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
     overwrite_table = True
     apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
     apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
@@ -108,7 +108,7 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
 
     N_colors = len(color_names)
     cut_spacings = {'g_w1': 0.1,
-                    'w1_w2': 0.1,
+                    'w1_w2': 0.01,
                     'bp_g': 0.1
                  }
     limits = {'g_w1': (1.75, 2.75),
@@ -173,7 +173,7 @@ def get_metric_matrices(fn_conf_mats, class_labels):
     return tps, fps_s, fps_g
 
 
-def objective_function(tps, fps_s, fps_g, lambda_s=3, lambda_g=3):
+def objective_function(tps, fps_s, fps_g, lambda_s=3, lambda_g=1):
     return tps - lambda_s*fps_s - lambda_g*fps_g
 
 
