@@ -24,8 +24,8 @@ def main():
     overwrite = True
 
     print("Loading data")
-    #fn_gaia = f'../data/gaia_G{G_max}.fits' 
-    fn_gaia = f'../data/gaia_clean.fits' 
+    fn_gaia = f'../data/gaiaQ_G{G_max}.fits' 
+    #fn_gaia = f'../data/gaia_clean.fits' 
     tab_gaia = utils.load_table(fn_gaia)
     i_makeGcut = tab_gaia['phot_g_mean_mag'] < G_max
     tab_gaia = tab_gaia[i_makeGcut]
