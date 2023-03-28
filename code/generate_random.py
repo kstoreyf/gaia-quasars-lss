@@ -28,7 +28,7 @@ def main():
     tag_rand = ''
     tag_prob_map = 'stardustm10'
 
-    G_max = 20.4
+    G_max = 20.0
     b_max = 10
     Av_max = 0.2
     gmag_comp = 20.8
