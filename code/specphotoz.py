@@ -32,11 +32,12 @@ def main():
     #     fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}.fits'
     #     combine_with_gaia_redshifts(fn_spz)
 
-    K = 11
+    #K = 11
+    K = 27
     #run(K=K)
-    #fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_kNN_K{K}_2std.fits'
-    #combine_with_gaia_redshifts(fn_spz_labeled)
-    fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}_2std.fits'
+    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_kNN_K{K}_std.fits'
+    combine_with_gaia_redshifts(fn_spz_labeled)
+    fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}_std.fits'
     combine_with_gaia_redshifts(fn_spz)
 
 
@@ -277,8 +278,8 @@ def combine_with_gaia_redshifts(fn_spz):
     z_spzraw = tab_spz['redshift_spz_raw']#[i_valid]
     z_gaia = tab_spz['redshift_qsoc']#[i_valid]
 
-    dz_min = 0.025
-    dz_max = 0.12
+    dz_min = 0.05
+    dz_max = 0.1
 
     dz_spzraw_gaia = (z_spzraw - z_gaia)/(1 + z_gaia)
     frac_shift = 1.0-(np.abs(dz_spzraw_gaia)-dz_min)/(dz_max-dz_min)
@@ -305,8 +306,6 @@ def combine_with_gaia_redshifts(fn_spz):
             print(f"QSOC: {frac_recovered_qsoc:.3f}")
 
     tab_spz['redshift_spz'] = z_spz
-    print(tab_spz.columns)
-    print(tab_spz['redshift_spz_err'])
     tab_spz.write(fn_spz, overwrite=True)
     print(f"Added SPZ/Gaia smoothed redshifts to {fn_spz}")
 
