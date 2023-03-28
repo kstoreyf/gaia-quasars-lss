@@ -21,7 +21,7 @@ def main():
     # stars_sdss_xgaia_good(overwrite=overwrite)
     # remove_duplicate_sources(overwrite=overwrite)
     #make_labeled_table(overwrite=overwrite)
-    make_quasars_sdss_clean(overwrite=overwrite)
+    #make_quasars_sdss_clean(overwrite=overwrite)
 
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
@@ -32,10 +32,9 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    # G_maxs = [20.0, 20.4]
-    # fn_spz='../data/redshift_estimates/redshifts_spz_kNN_G20.5_regression.fits'
-    # for G_max in G_maxs:
-    #     merge_gaia_spzs_and_cutGmax(fn_spz=fn_spz, G_max=G_max, overwrite=overwrite)
+    G_maxs = [20.0, 20.5]
+    for G_max in G_maxs:
+        merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -69,15 +68,14 @@ def sdss_slim(overwrite=False):
     save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
 
 
-def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
+def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz_kNN_K27_std.fits',
                                 G_max=20.5, overwrite=False):
 
     # save name
-    fn_gaia_withspz = f'../data/gaia_spz_G{G_max}.fits'
+    fn_gaiaQ = f'../data/gaiaQ_G{G_max}.fits'
 
     # data paths
-    fn_gaia = '../data/gaia_clean.fits'
-    assert G_max <= 20.5, "SPZs only go to 20.5!"
+    fn_gaia = '../data/gaia_candidates_clean.fits'
 
     # load data, cut to G_max
     tab_gaia = utils.load_table(fn_gaia)
@@ -85,7 +83,11 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshifts_spz_kNN_G20.5.fits',
 
     # SPZ-only table
     tab_spz = utils.load_table(fn_spz)
-    join_and_save(tab_gaia, tab_spz, fn_gaia_withspz, overwrite=overwrite)
+    tab_spz.keep_columns(['source_id', 'redshift_spz', 'redshift_spz_raw', 'redshift_spz_err'])
+
+    tab_gaiaQ = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
+    tab_gaiaQ.write(fn_gaiaQ, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gaiaQ)} objects to {fn_gaiaQ}")
 
 
 def add_randints_column(tab):
@@ -458,12 +460,6 @@ def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False,
     print(f"Wrote table with {len(tab)} objects to {fn_save}")
     return tab
 
-
-def join_and_save(tab1, tab2, fn_save, join_key='source_id', overwrite=False):
-    tab_joined = join(tab1, tab2, keys=join_key, join_type='inner')
-    tab_joined.write(fn_save, overwrite=overwrite)
-    print(f"Wrote table with {len(tab_joined)} objects to {fn_save}")
-    return tab_joined
 
 
 def save_as_csv(tab, column_names, fn_csv, overwrite=False):

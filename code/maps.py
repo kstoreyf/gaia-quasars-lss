@@ -22,7 +22,11 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
     assert func_name in ['count', 'mean'], f"Function {func_name} not recognized!"
 
     NPIX = hp.nside2npix(NSIDE)
-    pixel_indices = hp.ang2pix(NSIDE, ra.value, dec.value, lonlat=True)
+    if type(ra) == u.Quantity:
+        ra = ra.value
+    if type(dec) == u.Quantity:
+        dec = dec.value
+    pixel_indices = hp.ang2pix(NSIDE, ra, dec, lonlat=True)
 
     # via https://stackoverflow.com/a/23914036
     # and https://stackoverflow.com/a/58600295
@@ -53,7 +57,7 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
         return np.load(fn_map)
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     print(f"Generating new star map ({fn_map})")
-    tab_stars = load_table(fn_stars)
+    tab_stars = utils.load_table(fn_stars)
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_stars, _ = get_map(NSIDE, tab_stars['ra'], tab_stars['dec'], 
                                    func_name='count', null_val=0)
@@ -175,7 +179,7 @@ def get_m10_map(NSIDE, fn_map=None):
     NSIDE_high = 128
     NPIX_high = hp.nside2npix(NSIDE_high)
     # get the positions and Av values at the center of a high-NSIDE map
-    print("NPIX for dust map sampling:", NPIX_high)
+    print("NPIX for m10 map sampling:", NPIX_high)
     ra_high, dec_high = hp.pix2ang(NSIDE_high, np.arange(NPIX_high), lonlat=True)
     m10_high = get_m10(ra_high, dec_high)
     # Take the average over these points, so for a given NSIDE should get exact same map
@@ -183,7 +187,7 @@ def get_m10_map(NSIDE, fn_map=None):
                                          func_name='mean', null_val=np.nan)
     if fn_map is not None:
         np.save(fn_map, map_m10mean)
-        print(f"Saved dust map to {fn_map}")
+        print(f"Saved m10 map to {fn_map}")
     return map_m10mean
 
 ### Dust map functions
