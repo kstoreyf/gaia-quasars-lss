@@ -1,6 +1,7 @@
 import itertools
 import numpy as np
 import os
+import time
 from numpy.random import default_rng
 
 from scipy.optimize import minimize, basinhopping
@@ -9,16 +10,19 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.1_lg1'
+    tag_decontam = '_mag0.01_lg1'
     #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = True
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
 
-    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
+    s = time.time()
+    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
     overwrite_table = True
-    apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
-    apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
+    #apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
+    #apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
+    e = time.time()
+    print(f"Time: {e-s} s ({(e-s)/60} min)")
 
 
 def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
@@ -107,9 +111,9 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
         return utils.confusion_matrix(y_pred, y_train, class_labels)
 
     N_colors = len(color_names)
-    cut_spacings = {'g_w1': 0.1,
+    cut_spacings = {'g_w1': 0.01,
                     'w1_w2': 0.01,
-                    'bp_g': 0.1
+                    'bp_g': 0.01
                  }
     limits = {'g_w1': (1.75, 2.75),
               'w1_w2': (0.0, 1.0),
