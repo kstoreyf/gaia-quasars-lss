@@ -10,9 +10,9 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.01_lg1'
+    tag_decontam = '_mag0.25_wdiag'
     #tag_decontam = '_mag0.1-0.01_lg1'
-    overwrite_conf_mats = True
+    overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
 
@@ -45,11 +45,11 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
     i_train, i_valid, i_test = utils.split_train_val_test(tab_labeled['rand_ints'], frac_train=0.5, frac_test=0.25, frac_val=0.25)
     
     X_train = X_labeled[i_train]
-    X_valid = X_labeled[i_valid]
+    #X_valid = X_labeled[i_valid]
 
     y_labeled = tab_labeled['class']
     y_train = y_labeled[i_train]
-    y_valid = y_labeled[i_valid]
+    #y_valid = y_labeled[i_valid]
 
     # Get cuts
     if not os.path.exists(fn_conf_mats) or overwrite_conf_mats:
@@ -103,60 +103,55 @@ def construct_X(tab, color_names):
 def make_cut_grid(X_train, y_train, class_labels, color_names,
                   fn_conf_mats=None):
 
-    def get_conf_mat(cuts_min):
+    def get_conf_mat(slopes, intercepts):
         # transpose matrix because first arg is colors; cuts_min should be in proper order
-        idx_predq = utils.cuts_index(X_train.T, cuts_min)
+        idx_predq = utils.cuts_index(X_train, slopes, intercepts)
         y_pred = np.full(X_train.shape[0], 's') # label all star even tho some gals
         y_pred[idx_predq] = 'q'
         return utils.confusion_matrix(y_pred, y_train, class_labels)
 
-    N_colors = len(color_names)
-    cut_spacings = {'g_w1': 0.01,
-                    'w1_w2': 0.01,
-                    'bp_g': 0.01
-                 }
-    limits = {'g_w1': (1.75, 2.75),
-              'w1_w2': (0.0, 1.0),
-              'bp_g': (-1.0, 0.0)
-             }
-    cut_arr = [np.arange(limits[cn][0], limits[cn][1]+cut_spacings[cn], cut_spacings[cn]) for cn in color_names]
-    index_ranges = [np.arange(len(cuts)) for cuts in cut_arr]
+    # the order of these 3 arrays must be maintained!
+    slope_dict_arr = [{'g_w1': 1, 'w1_w2': 0, 'bp_g': 0},
+                      {'g_w1': 0, 'w1_w2': 1, 'bp_g': 0},
+                      {'g_w1': 0, 'w1_w2': 0, 'bp_g': 1},
+                      {'g_w1': 1, 'w1_w2': 1.2, 'bp_g': 0}
+                      ]
+    slopes = [[slope_dict[cn] for cn in color_names] for slope_dict in slope_dict_arr]
+    intercept_limits = [(1.75, 2.75), (0.0, 1.0), (-1.0, 0.0), (3, 4)]
+    #intercept_spacings = [0.1, 0.1, 0.1, 0.1]
+    intercept_spacings = [0.25, 0.25, 0.25, 0.25]
+    N_cuts = len(slope_dict_arr)
+
+    intercepts_arr = [np.arange(intercept_limits[i][0], intercept_limits[i][1]+intercept_spacings[i], \
+                         intercept_spacings[i]) for i in range(N_cuts)]
+    index_ranges = [np.arange(len(intercepts)) for intercepts in intercepts_arr]
 
     # maybe a better way to do this but
-    conf_mats = np.empty((*[len(cuts) for cuts in cut_arr], len(class_labels), len(class_labels)))
+    conf_mats = np.empty((*[len(intercepts) for intercepts in intercepts_arr], len(class_labels), len(class_labels)))
     for indices in itertools.product(*index_ranges):
         print(indices)
-        cuts_min = [cut_arr[cc][indices[cc]] for cc in range(N_colors)]
-        print(cuts_min)
-        conf_mats[indices] = get_conf_mat(cuts_min)
-
-    # val_spacing = 0.1
-    # val_spacing_fine = 0.01
-    # g_w1_vals = np.arange(1.75, 2.75+val_spacing, val_spacing)
-    # w1_w2_vals = np.arange(0.0, 1.0+val_spacing_fine, val_spacing_fine)
-    # bp_g_vals = np.arange(-1, 0.0+val_spacing, val_spacing)
-    # conf_mats = np.empty((len(g_w1_vals), len(w1_w2_vals), len(bp_g_vals),
-    #                      len(class_labels), len(class_labels)))
-    # for i in range(len(g_w1_vals)):
-    #     for j in range(len(w1_w2_vals)):
-    #         for k in range(len(bp_g_vals)):
-    #             print(g_w1_vals[i], w1_w2_vals[j], bp_g_vals[k])
-    #             conf_mats[i,j,k] = get_conf_mat([g_w1_vals[i], w1_w2_vals[j], bp_g_vals[k]])
+        intercepts = [intercepts_arr[cc][indices[cc]] for cc in range(N_cuts)]
+        print(slopes)
+        print(intercepts)
+        conf_mats[indices] = get_conf_mat(slopes, intercepts)
 
     results = {}
-    results['cut_min_arr'] = cut_arr
+    results['intercepts_arr'] = intercepts_arr
+    results['slopes'] = slopes
     results['color_names'] = color_names
     results['conf_mats'] = np.array(conf_mats)
     np.save(fn_conf_mats, results)
+    print("Saved conf mats to", fn_conf_mats)
 
 
 
 def get_metric_matrices(fn_conf_mats, class_labels):
     results = np.load(fn_conf_mats, allow_pickle=True).item()
-    cut_arr = results['cut_min_arr']
+    intercepts_arr = results['intercepts_arr']
+    slopes = results['slopes']
     color_names = results['color_names']
     conf_mats = np.array(results['conf_mats'])
-    N_cuts = [len(cuts) for cuts in cut_arr]
+    N_cuts = [len(intercepts) for intercepts in intercepts_arr]
     print(N_cuts)
     index_ranges = [np.arange(N_cut) for N_cut in N_cuts]
 
@@ -185,20 +180,21 @@ def get_best_cuts(fn_conf_mats, class_labels, fn_cuts=None):
 
     results = np.load(fn_conf_mats, allow_pickle=True).item()
     color_names = results['color_names']
-    cut_arr = results['cut_min_arr']
+    intercepts_arr = np.array(results['intercepts_arr'])
+    slopes = np.array(results['slopes'])
 
     tps, fps_s, fps_g = get_metric_matrices(fn_conf_mats, class_labels)
     objs = objective_function(tps, fps_s, fps_g)
     indices_best = np.unravel_index(objs.argmax(), objs.shape)
-    N_colors = len(color_names)    
-    cuts_min_best = [cut_arr[cc][indices_best[cc]] for cc in range(N_colors)]
-    print(objs[indices_best])
-    print(cuts_min_best)
-
-    res = np.array([color_names, cuts_min_best]).T
+    N_cuts = len(intercepts_arr)
+    #cuts_min_best = [cut_arr[cc][indices_best[cc]] for cc in range(N_colors)]
+    intercepts_best = np.array([intercepts_arr[ii][indices_best[ii]] for ii in range(N_cuts)])
+    delim = ','
+    header = delim.join(color_names + ['intercept'])
+    res = np.hstack((slopes, np.atleast_2d(intercepts_best).T))
     if fn_cuts is not None:
-        np.savetxt(fn_cuts, res, fmt="%s")
-    return cuts_min_best, indices_best
+        np.savetxt(fn_cuts, res, fmt="%s", delimiter=delim, header=header)
+    return slopes, intercepts_best, indices_best
 
 
 def make_clean_subsample(fn_cuts, fn_orig, fn_clean, overwrite=False):

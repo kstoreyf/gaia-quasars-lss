@@ -68,7 +68,7 @@ def gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts):
 def gw1_w1w2_cut_index(g_w1, w1_w2, cut):
     return cut[0]*g_w1 + cut[1]*w1_w2 > cut[2]
 
-def cuts_index(colors, cuts_min):
+def cuts_index_straight(colors, cuts_min):
     # start with all
     i_clean = np.full(len(colors[0]), True)
     for color, cut in zip(colors, cuts_min):
@@ -76,6 +76,19 @@ def cuts_index(colors, cuts_min):
         i_clean = i_clean & i_colorcut    
     return i_clean
 
+def cuts_index(color_arr, slopes, intercepts):
+    color_arr = np.array(color_arr)
+    slopes = np.array(slopes)
+    intercepts = np.array(intercepts)
+    #assert color_arr.shape[1]==slopes.shape[1], "Should have same # colors and slopes"
+    assert slopes.shape[0]==intercepts.shape[0], "Should have same # slopes and intercepts"
+    i_clean = np.full(color_arr.shape[0], True)
+    for ii in range(len(intercepts)):
+        #print((color_arr*slopes[ii]).shape)
+        i_makescut = np.dot(color_arr, slopes[ii]) > intercepts[ii]
+        #i_colorcut = colors[0]*cut[0] + colors[1]*cut[1] > cut[2]
+        i_clean = i_clean & i_makescut    
+    return i_clean
 
 # gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
 def cross_match_nearest(ra1, dec1, ra2, dec2, separation):
