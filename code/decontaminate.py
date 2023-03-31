@@ -17,7 +17,7 @@ def main():
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
 
     s = time.time()
-    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
+    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
     overwrite_table = True
     apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
     apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
@@ -204,17 +204,26 @@ def make_clean_subsample(fn_cuts, fn_orig, fn_clean,
     
     # Load data
     tab_orig = utils.load_table(fn_orig)
-    color_names, cuts = np.genfromtxt(fn_cuts, dtype=['U15', '<f8'], unpack=True)
-    print(color_names, cuts)
+
+    #cuts = np.loadtxt(fn_cuts, delimiter=',')
+    print(fn_cuts)
+    cuts = np.genfromtxt(fn_cuts, delimiter=',', names=True)
+    print(cuts)
+    cut_names = cuts.dtype.names
+    color_names = cut_names[:-1] # exclude intercept
+    cuts = np.array([list(cut) for cut in cuts])
+    slopes = cuts[:,:-1]
+    intercepts_best = cuts[:,-1]
 
     # this will make sure color_names and cuts remain in proper order
     X_orig = construct_X(tab_orig, color_names)
-    i_makes_colorcuts = utils.cuts_index(X_orig.T, cuts)
+    i_makes_colorcuts = utils.cuts_index(X_orig, slopes, intercepts_best)
     tab_clean = tab_orig[i_makes_colorcuts]
     
     # Proper motion cut
     if proper_motion_cut:
         i_makes_pmcut = utils.cut_pm_G(tab_clean)
+        print(f"Removing {np.sum(~i_makes_pmcut)} with PM cut")
         tab_clean = tab_clean[i_makes_pmcut]
 
     # Add random vals
