@@ -10,7 +10,7 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.25_wdiag'
+    tag_decontam = '_mag0.1_wdiag'
     #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
@@ -19,8 +19,8 @@ def main():
     s = time.time()
     compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
     overwrite_table = True
-    #apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
-    #apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
+    apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
+    apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
@@ -118,8 +118,8 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
                       ]
     slopes = [[slope_dict[cn] for cn in color_names] for slope_dict in slope_dict_arr]
     intercept_limits = [(1.75, 2.75), (0.0, 1.0), (-1.0, 0.0), (3, 4)]
-    #intercept_spacings = [0.1, 0.1, 0.1, 0.1]
-    intercept_spacings = [0.25, 0.25, 0.25, 0.25]
+    intercept_spacings = [0.1, 0.1, 0.1, 0.1]
+    #intercept_spacings = [0.25, 0.25, 0.25, 0.25]
     N_cuts = len(slope_dict_arr)
 
     intercepts_arr = [np.arange(intercept_limits[i][0], intercept_limits[i][1]+intercept_spacings[i], \
@@ -189,15 +189,18 @@ def get_best_cuts(fn_conf_mats, class_labels, fn_cuts=None):
     N_cuts = len(intercepts_arr)
     #cuts_min_best = [cut_arr[cc][indices_best[cc]] for cc in range(N_colors)]
     intercepts_best = np.array([intercepts_arr[ii][indices_best[ii]] for ii in range(N_cuts)])
+    print("Intercepts best:", intercepts_best)
     delim = ','
     header = delim.join(color_names + ['intercept'])
     res = np.hstack((slopes, np.atleast_2d(intercepts_best).T))
     if fn_cuts is not None:
         np.savetxt(fn_cuts, res, fmt="%s", delimiter=delim, header=header)
+        print(f"Saved cuts to {fn_cuts}")
     return slopes, intercepts_best, indices_best
 
 
-def make_clean_subsample(fn_cuts, fn_orig, fn_clean, overwrite=False):
+def make_clean_subsample(fn_cuts, fn_orig, fn_clean, 
+                         proper_motion_cut=True, overwrite=False):
     
     # Load data
     tab_orig = utils.load_table(fn_orig)
@@ -206,9 +209,14 @@ def make_clean_subsample(fn_cuts, fn_orig, fn_clean, overwrite=False):
 
     # this will make sure color_names and cuts remain in proper order
     X_orig = construct_X(tab_orig, color_names)
-    i_makes_cuts = utils.cuts_index(X_orig.T, cuts)
-    tab_clean = tab_orig[i_makes_cuts]
+    i_makes_colorcuts = utils.cuts_index(X_orig.T, cuts)
+    tab_clean = tab_orig[i_makes_colorcuts]
     
+    # Proper motion cut
+    if proper_motion_cut:
+        i_makes_pmcut = utils.cut_pm_G(tab_clean)
+        tab_clean = tab_clean[i_makes_pmcut]
+
     # Add random vals
     rng = np.random.default_rng(seed=42)
     tab_clean['rand_ints'] = rng.choice(range(len(tab_clean)), size=len(tab_clean), replace=False)

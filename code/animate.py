@@ -21,17 +21,21 @@ def main():
     #fn_data = '../data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-    G_max = 20.4
-    data_tag = f'gaia_G{G_max}'
+    G_max = 20.0
+    data_tag = f'gaiaQ_G{G_max}'
+
+    plot_dir = '../plots/2023-03-29_figures'
+    fn_save_init = f'{plot_dir}/gcatlo_3d.png'
     #data_tag = 'sdss'
 
     if 'gaia' in data_tag:
-        fn_data = f'../data/gaia_G{G_max}.fits'
+        fn_data = f'../data/gaiaQ_G{G_max}.fits'
         title = 'Gaia QSO catalog ($G<20.4$)'
         colorbar_label = r'redshift $z$ (spectrophotometric)'
         redshift_name = 'redshift_spz'
         property_colorby = redshift_name
         ra_name, dec_name = 'ra', 'dec'
+        clean_sdss = False
     elif 'sdss' in data_tag:
         fn_data = f'../data/sdss_slim.fits'
         title = 'SDSS DR16 QSOs'
@@ -39,6 +43,7 @@ def main():
         redshift_name = 'Z'
         property_colorby = redshift_name
         ra_name, dec_name = 'RA', 'DEC'
+        clean_sdss = True
 
     #format_save = 'gif'
     format_save = 'mp4'
@@ -56,33 +61,26 @@ def main():
     vmin, vmax = 0, 4.5
 
     print("Reading data:", fn_data)
-    data = Table.read(fn_data, format='fits')
+    tab = Table.read(fn_data, format='fits')
+    print("Loaded data with N =", len(tab))
+    if clean_sdss:
+        i_zwarning0 = tab['ZWARNING']==0
+        i_zgood = tab['Z'] > 0.01
+        tab = tab[i_zwarning0 & i_zgood]
 
-    #idx_pure = pure_cut(data)
-    #data = data[idx_pure]
-    print("Loaded data with N =", len(data))
-
-    # Subsample, if desired
-    if N_sub_str!='all':
-        N_sub = int(float(N_sub_str))
-        data = subsample(data, N_sub)
-        print("Subsampled data to N =", len(data))
-
-    # Convert to cartesian
-    print("Converting to cartesian")
-    cosmo = astropy.cosmology.Planck15
-    add_xyz(data, cosmo, redshift_name, ra_name=ra_name, dec_name=dec_name)
-
-    # add properties
-    print("Adding properties")
-    #add_g_rp_color(data)
-    if property_colorby=='M_absolute':
-        add_M_absolute(data, cosmo, redshift_name)
+    tab = prepare_data(tab, redshift_name, ra_name=ra_name, dec_name=dec_name, 
+                        N_sub_str=N_sub_str)
 
     scmap = utils.shiftedColorMap(matplotlib.cm.plasma_r, start=0.2, midpoint=0.6, stop=1.0, name='plasma_shifted')
     # Create an init function and the animate functions.
     print(f"s = {s}, alpha={alpha}, lim={lim}, vmin={vmin}, vmax={vmax}")
-    anim = make_anim(data, data[property_colorby], s, alpha, lim, vmin, vmax,
+
+    plot_init(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
+                 cmap=scmap, colorbar_label=colorbar_label,
+                 fn_save_init=fn_save_init)
+    print(stophere)
+
+    anim = make_anim(tab, property_colorby, s, alpha, lim, vmin, vmax,
                      cmap=scmap, title=title, colorbar_label=colorbar_label)
 
     print("Saving animation to", fn_save)
@@ -98,6 +96,80 @@ def main():
     print("Saved!")
 
 
+def prepare_data(tab, redshift_name, ra_name='ra', dec_name='dec', 
+                 N_sub_str='all', add_M=False):
+    tab = tab.copy()
+
+    # Subsample, if desired
+    if N_sub_str!='all':
+        N_sub = int(float(N_sub_str))
+        tab = subsample(tab, N_sub)
+        print("Subsampled data to N =", len(tab))
+
+    # Convert to cartesian
+    print("Converting to cartesian")
+    cosmo = astropy.cosmology.Planck15
+    add_xyz(tab, cosmo, redshift_name, ra_name=ra_name, dec_name=dec_name)
+
+    # add properties
+    print("Adding properties")
+    #add_g_rp_color(data)
+    if add_M:
+        add_M_absolute(tab, cosmo, redshift_name)
+    return tab
+
+
+def plot_init(tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
+                  title='', colorbar_label=r'redshift $z$', colorbar=True,
+                  fn_save_init=None):
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(projection='3d')
+    init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap=cmap, 
+                   title=title, colorbar_label=colorbar_label, colorbar=colorbar,
+                   #fn_save_init=fn_save_init,
+                   )
+    if fn_save_init is not None:
+       plt.savefig(fn_save_init, bbox_inches='tight')
+
+
+def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
+                  title='', colorbar_label=r'redshift $z$', colorbar=True,
+                  fn_save_init=None):
+    #fig = plt.figure(figsize=(10,10))
+    #ax = fig.add_subplot(projection='3d')
+    ax.scatter(tab['x'], tab['y'], tab['z'], c=c, s=s, 
+                      alpha=alpha, 
+                      cmap=cmap, vmin=vmin, vmax=vmax
+                      )
+    ax.axis('off')
+
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_zlim(-lim, lim)
+    ax.set_facecolor('white')
+    ax.set_title(title, y=1.03, fontsize=28)
+
+    # colorbar
+    if colorbar:
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        cc = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        #cbaxes = fig.add_axes([1.05, 0.26, 0.02, 0.5]) # side
+        cbaxes = fig.add_axes([0.92, 0.26, 0.02, 0.5]) # side, closer in
+        cbar = fig.colorbar(cc, cax=cbaxes, orientation='vertical')
+        #cbaxes = fig.add_axes([0.26, 0.09, 0.5, 0.02]) # bottom
+        cbar.set_label(label=colorbar_label, fontsize=25)
+        cbar.ax.tick_params(labelsize=22)
+        #cbar.ax.set_yticklabels([0,1,2,3,4])
+        tick_locator = ticker.MaxNLocator(nbins=5)
+        cbar.locator = tick_locator
+        cbar.update_ticks()
+
+    if fn_save_init is not None:
+        plt.savefig(fn_save_init, bbox_inches='tight')
+
+    #return fig,
+
+
 def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
               title='', colorbar_label=r'redshift $z$', colorbar=True):
     # Create a figure and a 3D Axes
@@ -107,7 +179,7 @@ def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
     def init():
         #fig = plt.figure(figsize=(10,10))
         #ax = fig.add_subplot(projection='3d')
-        scat = ax.scatter(data['x'], data['y'], data['z'], c=c, s=s, alpha=alpha, 
+        ax.scatter(data['x'], data['y'], data['z'], c=c, s=s, alpha=alpha, 
                           cmap=cmap, vmin=vmin, vmax=vmax)
         ax.axis('off')
 

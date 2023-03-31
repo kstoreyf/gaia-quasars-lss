@@ -75,6 +75,7 @@ def cuts_index_straight(colors, cuts_min):
         i_colorcut = color > cut
         i_clean = i_clean & i_colorcut    
     return i_clean
+    
 
 def cuts_index(color_arr, slopes, intercepts):
     color_arr = np.array(color_arr)
@@ -89,6 +90,15 @@ def cuts_index(color_arr, slopes, intercepts):
         #i_colorcut = colors[0]*cut[0] + colors[1]*cut[1] > cut[2]
         i_clean = i_clean & i_makescut    
     return i_clean
+
+
+def _pm_G_line(G):
+    return 10**(0.4*(G-18.25))
+
+def cut_pm_G(tab):
+    i_makescut = tab['pm'] < _pm_G_line(tab['phot_g_mean_mag'])
+    return i_makescut
+
 
 # gets nearest neighbor first, then cuts by sep, so guaranteed to be 0 or 1 matches
 def cross_match_nearest(ra1, dec1, ra2, dec2, separation):
