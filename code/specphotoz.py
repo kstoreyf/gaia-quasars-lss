@@ -14,8 +14,8 @@ from sklearn.neighbors import KDTree
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingRegressor, GradientBoostingRegressor
-import xgboost as xgb
-from xgboost import XGBRegressor
+#import xgboost as xgb
+#from xgboost import XGBRegressor
 
 import utils
 
@@ -34,7 +34,7 @@ def main():
 
     #K = 11
     K = 27
-    #run(K=K)
+    run(K=K)
     fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_kNN_K{K}_std.fits'
     combine_with_gaia_redshifts(fn_spz_labeled)
     fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}_std.fits'
@@ -66,7 +66,7 @@ def run(K=27):
     prev_mode = 'add'
     spz_prev_name = 'redshift_spz_raw'
 
-    save_tag_model = f'_K{K}_2std'
+    save_tag_model = f'_K{K}_std'
     #save_tag_model = f'_K{K}_prev_hgboost'
     #save_tag_model = f'_K{K}_resid'
     #save_tag_model = f'_scale_wphot'
@@ -457,10 +457,10 @@ class RedshiftEstimatorkNN(RedshiftEstimator):
         inds_nodist0 = np.empty((inds.shape[0], self.K), dtype=int)
         inds_nodist0[idx_nearest_dist0] = inds[idx_nearest_dist0,1:]
         inds_nodist0[~idx_nearest_dist0] = inds[~idx_nearest_dist0,:-1]
-        low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (2.5, 50, 97.5), axis=1)
-        sigma_z = (up_z - low_z)/4
-        # low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (16, 50, 84), axis=1)
-        # sigma_z = 0.5*(up_z - low_z)
+        #low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (2.5, 50, 97.5), axis=1)
+        #sigma_z = (up_z - low_z)/4
+        low_z, Y_hat, up_z = np.percentile(self.Y_train[inds_nodist0], (16, 50, 84), axis=1)
+        sigma_z = 0.5*(up_z - low_z)
         return Y_hat, sigma_z
 
 

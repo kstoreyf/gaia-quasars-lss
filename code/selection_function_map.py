@@ -19,7 +19,7 @@ def main():
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.fits"
+    fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}.fits"
     overwrite = True
 
     print("Loading data")

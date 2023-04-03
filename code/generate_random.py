@@ -28,7 +28,7 @@ def main():
     tag_rand = ''
     tag_prob_map = 'stardustm10'
 
-    G_max = 20.0
+    G_max = 20.5
     b_max = 10
     Av_max = 0.2
     gmag_comp = 20.8
@@ -54,14 +54,14 @@ def main():
 
     tag_data = f'_G{G_max}'
     tag_rand += tag_data
-    fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
+    fn_rand = f'../data/randoms/randomQ{tag_rand}_{fac_rand}x.fits'
     overwrite = True
 
     NSIDE_masks = 64
     rng = default_rng(seed=42)
     fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
     fn_starmap = f'../data/stardensmap_NSIDE{NSIDE_starmap}.npy'
-    fn_probmap = f'../data/maps/map_probability_dust_stars_m10_NSIDE{NSIDE_probmap}_G{G_max}.fits'
+    fn_probmap = f'../data/maps/mapQ_probability_dust_stars_m10_NSIDE{NSIDE_probmap}_G{G_max}.fits'
 
     # Load and set up data
     print("Loading data")
