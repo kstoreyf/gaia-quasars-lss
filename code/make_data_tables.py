@@ -20,10 +20,10 @@ def main():
     # quasars_sdss_xgaia_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
-    #mcs_xgaia(overwrite=overwrite)
+    mcs_xgaia(overwrite=overwrite)
     #remove_duplicate_sources(overwrite=overwrite)
 
-    make_labeled_table(overwrite=overwrite)
+    #make_labeled_table(overwrite=overwrite)
     #make_quasars_sdss_clean(overwrite=overwrite)
     
     #get_gaia_xsdssfootprint(overwrite=overwrite)
@@ -127,6 +127,7 @@ def gaia_candidates_plus_info(overwrite=False):
 
     add_randints_column(tab_gaia)
 
+    print(tab_gaia.columns)
     tab_gaia.write(fn_gaia_plus, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gaia)} objects to {fn_gaia_plus}")
 
@@ -143,18 +144,10 @@ def gaia_candidates_superset(overwrite=False):
     # Load data
     print("Loading data")
     tab_gaia = utils.load_table(fn_gaia)
-    print(f"Original Gaia table: N={len(tab_gaia)}")
-    print('Gaia plus columns:', tab_gaia.columns)
-    tab_xwise = Table.read(fn_xwise, format='csv')
-    print('unWISE xmatch columns:', tab_xwise.columns)
-
-    tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
-    tab_gsup = join(tab_gaia, tab_xwise, keys_left='source_id', keys_right='t1_source_id',
-                          join_type='left')
-    tab_gsup.remove_column('t1_source_id')                  
+    print(f"Original Gaia table: N={len(tab_gaia)}")               
 
     # Require finite photometry, redshift_qsoc, and makes G cut
-    tab_gsup = utils.make_superset_cuts(tab_gsup)
+    tab_gsup = utils.make_superset_cuts(tab_gaia)
 
     # Compute the color differences
     utils.add_gaia_wise_colors(tab_gsup)
@@ -307,6 +300,7 @@ def mcs_xgaia(overwrite=False):
     #fn_gaia = '../data/gaia_candidates_superset.fits'
     tab_gaia = utils.load_table(fn_gaia)
     print(len(tab_gaia))
+    print(tab_gaia.columns)
 
     coord_lmc = SkyCoord('5h23m34.5s', '-69d45m22s', frame='icrs')
     coord_smc = SkyCoord('0h52m44.8s', '-72d49m43s', frame='icrs')
