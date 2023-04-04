@@ -1,7 +1,8 @@
 import numpy as np
 
-from astropy.table import Table, join, vstack
 from astropy import units as u
+from astropy.coordinates import SkyCoord
+from astropy.table import Table, join, vstack
 
 import utils
 
@@ -19,10 +20,12 @@ def main():
     # quasars_sdss_xgaia_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
-    # remove_duplicate_sources(overwrite=overwrite)
-    #make_labeled_table(overwrite=overwrite)
-    #make_quasars_sdss_clean(overwrite=overwrite)
+    #mcs_xgaia(overwrite=overwrite)
+    #remove_duplicate_sources(overwrite=overwrite)
 
+    make_labeled_table(overwrite=overwrite)
+    #make_quasars_sdss_clean(overwrite=overwrite)
+    
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
     #gaia_unwise_slim(overwrite=overwrite)
@@ -32,9 +35,9 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    G_maxs = [20.0, 20.5]
-    for G_max in G_maxs:
-        merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+    # G_maxs = [20.0, 20.5]
+    # for G_max in G_maxs:
+    #   merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -86,6 +89,7 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
     tab_spz.keep_columns(['source_id', 'redshift_spz', 'redshift_spz_raw', 'redshift_spz_err'])
 
     tab_gaiaQ = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
+    add_randints_column(tab_gaiaQ)
     tab_gaiaQ.write(fn_gaiaQ, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gaiaQ)} objects to {fn_gaiaQ}")
 
@@ -101,7 +105,11 @@ def gaia_candidates_plus_info(overwrite=False):
     fn_gaia_plus = '../data/gaia_candidates_plus.fits.gz'
 
     fn_gaia = '../data/gaia_candidates.fits.gz'
+    fn_xwise = '../data/gaia_candidates_xunwise_all.csv'
+
     tab_gaia = utils.load_table(fn_gaia)
+    tab_xwise = utils.load_table(fn_xwise, format='csv')
+    print(f"Gaia candidates: N={len(tab_gaia)}")
 
     utils.add_ebv(tab_gaia)
     Rv = 3.1
@@ -110,6 +118,12 @@ def gaia_candidates_plus_info(overwrite=False):
 
     pm = np.sqrt(tab_gaia['pmra']**2 + tab_gaia['pmdec']**2)
     tab_gaia.add_column(pm, name='pm')
+
+    # Cross match with unwise
+    tab_xwise.keep_columns(['t1_source_id', 'mag_w1_vg', 'mag_w2_vg', 'unwise_objid'])
+    tab_gaia = join(tab_gaia, tab_xwise, keys_left='source_id',            
+                    keys_right='t1_source_id', join_type='left')
+    tab_gaia.remove_column('t1_source_id')      
 
     add_randints_column(tab_gaia)
 
@@ -286,12 +300,49 @@ def stars_sdss_xgaia_good(overwrite=False):
     print(f"Wrote table with {len(tab_stars_sdss_xgaia)} objects to {fn_stars_sdss_xgaia_good}")
 
 
+def mcs_xgaia(overwrite=False):
+    fn_mcs = '../data/mcs_xgaia.fits'
+
+    fn_gaia = '../data/gaia_candidates_plus.fits.gz'
+    #fn_gaia = '../data/gaia_candidates_superset.fits'
+    tab_gaia = utils.load_table(fn_gaia)
+    print(len(tab_gaia))
+
+    coord_lmc = SkyCoord('5h23m34.5s', '-69d45m22s', frame='icrs')
+    coord_smc = SkyCoord('0h52m44.8s', '-72d49m43s', frame='icrs')
+
+    sep_max_lmc = 3*u.deg
+    sep_max_smc = 1.5*u.deg
+
+    catalog = SkyCoord(ra=tab_gaia['ra'], dec=tab_gaia['dec'])
+
+    #idxc, idxcatalog, d2d, d3d = catalog.search_around_sky(coord_lmc, sep_max_lmc)
+    seps = catalog.separation(coord_lmc)
+    i_lmc = seps < sep_max_lmc
+
+    seps = catalog.separation(coord_smc)
+    i_smc = seps < sep_max_smc
+
+    print(f'LMC: N={np.sum(i_lmc)}')
+    print(f'SMC: N={np.sum(i_smc)}')
+    
+    tab_mcs = tab_gaia[i_lmc | i_smc]
+    print(len(tab_mcs))
+    tab_mcs.write(fn_mcs, overwrite=overwrite)
+    print(f"Wrote MCs tab as {fn_mcs} (N={len(tab_mcs)})")
+
+
 def remove_duplicate_sources(overwrite=False):
 
     print("Loading tables")
     fn_quasars = '../data/quasars_sdss_xgaia_xunwise_good.fits'
     fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
     fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
+
+    fn_mcs = '../data/mcs_xgaia.fits'
+    tab_mcs = utils.load_table(fn_mcs)
+    print(len(tab_mcs))
+
     fns = [fn_quasars, fn_galaxies, fn_stars]
     source_ids = []
     tabs = []
@@ -307,15 +358,17 @@ def remove_duplicate_sources(overwrite=False):
     source_ids_duplicate = u[c > 1]
     print(f"Found {len(source_ids_duplicate)} duplicated source_ids")
 
-    for i, tab in enumerate(tabs):
-        i_dup = np.isin(tab['source_id'], source_ids_duplicate)
+    # Remove duplicates from 3 SDSS tables
+    for i in range(len(tabs)):
+        i_dup = np.isin(tabs[i]['source_id'], source_ids_duplicate)
         print(f"Removing {np.sum(i_dup)} from {fns[i]}")
-        print(f"Old table size: {len(tab)}")
-        tab = tab[~i_dup]
-        print(f"New table size: {len(tab)}")
+        print(f"Old table size: {len(tabs[i])}")
+        tabs[i] = tabs[i][~i_dup]
+        print(f"New table size: {len(tabs[i])}")
+
         fn_save = fns[i].split('.fits')[0] + '_nodup.fits'
         print(f"Saving to {fn_save}")
-        tab.write(fn_save, overwrite=overwrite)        
+        tabs[i].write(fn_save, overwrite=overwrite)        
 
 
 
@@ -338,18 +391,23 @@ def make_labeled_table(overwrite=False):
     tab_sgals = utils.load_table(f'../data/galaxies_sdss_xgaia_xunwise_good_nodup.fits')
     print(f"Number of SDSS galaxies: {len(tab_sgals)}")
 
+    tab_mcs = utils.load_table(f'../data/mcs_xgaia.fits')
+    print(f"Number of MCs: {len(tab_mcs)}")
+
     ## Stack into single table & arrays
     tab_squasars['class'] = 'q'
     tab_sstars['class'] = 's'
     tab_sgals['class'] = 'g'
+    tab_mcs['class'] = 'm'
 
     cols_tokeep = ['source_id', 'class']
 
     tab_squasars.keep_columns(cols_tokeep)
     tab_sstars.keep_columns(cols_tokeep)
     tab_sgals.keep_columns(cols_tokeep)
+    tab_mcs.keep_columns(cols_tokeep)
 
-    tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals], metadata_conflicts='silent')
+    tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals, tab_mcs], metadata_conflicts='silent')
 
     # Only keep labeled data that are also in our wnec sample
     # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 

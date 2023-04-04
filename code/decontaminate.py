@@ -10,17 +10,18 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.1_wdiag'
+    tag_decontam = '_mag0.25_lm5'
+    #tag_decontam = '_manual'
     #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
 
     s = time.time()
-    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
+    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
     overwrite_table = True
-    apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
-    apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
+    #apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
+    #apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
@@ -36,7 +37,7 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
     fn_labeled = '../data/labeled_superset.fits'
     tab_labeled = utils.load_table(fn_labeled)
     print(f"Number of labeled Gaia quasar candidates for training/validation: {len(tab_labeled)}")
-    class_labels = ['q', 's', 'g']
+    class_labels = ['q', 's', 'g', 'm']
     print(tab_labeled.columns)
 
     # Make labeled training and validation data
@@ -106,7 +107,7 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
     def get_conf_mat(slopes, intercepts):
         # transpose matrix because first arg is colors; cuts_min should be in proper order
         idx_predq = utils.cuts_index(X_train, slopes, intercepts)
-        y_pred = np.full(X_train.shape[0], 's') # label all star even tho some gals
+        y_pred = np.full(X_train.shape[0], 's') # label all star even tho some other contams, doesnt matter
         y_pred[idx_predq] = 'q'
         return utils.confusion_matrix(y_pred, y_train, class_labels)
 
@@ -118,20 +119,20 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
                       ]
     slopes = [[slope_dict[cn] for cn in color_names] for slope_dict in slope_dict_arr]
     intercept_limits = [(1.75, 2.75), (0.0, 1.0), (-1.0, 0.0), (3, 4)]
-    intercept_spacings = [0.1, 0.1, 0.1, 0.1]
-    #intercept_spacings = [0.25, 0.25, 0.25, 0.25]
+    #intercept_spacings = [0.1, 0.1, 0.1, 0.1]
+    intercept_spacings = [0.25, 0.25, 0.25, 0.25]
     N_cuts = len(slope_dict_arr)
 
     intercepts_arr = [np.arange(intercept_limits[i][0], intercept_limits[i][1]+intercept_spacings[i], \
                          intercept_spacings[i]) for i in range(N_cuts)]
     index_ranges = [np.arange(len(intercepts)) for intercepts in intercepts_arr]
 
+    print(slopes)
     # maybe a better way to do this but
     conf_mats = np.empty((*[len(intercepts) for intercepts in intercepts_arr], len(class_labels), len(class_labels)))
     for indices in itertools.product(*index_ranges):
         print(indices)
         intercepts = [intercepts_arr[cc][indices[cc]] for cc in range(N_cuts)]
-        print(slopes)
         print(intercepts)
         conf_mats[indices] = get_conf_mat(slopes, intercepts)
 
@@ -148,8 +149,7 @@ def make_cut_grid(X_train, y_train, class_labels, color_names,
 def get_metric_matrices(fn_conf_mats, class_labels):
     results = np.load(fn_conf_mats, allow_pickle=True).item()
     intercepts_arr = results['intercepts_arr']
-    slopes = results['slopes']
-    color_names = results['color_names']
+
     conf_mats = np.array(results['conf_mats'])
     N_cuts = [len(intercepts) for intercepts in intercepts_arr]
     print(N_cuts)
@@ -158,22 +158,25 @@ def get_metric_matrices(fn_conf_mats, class_labels):
     tps = np.empty(N_cuts)
     fps_s = np.empty(N_cuts)
     fps_g = np.empty(N_cuts)
+    fps_m = np.empty(N_cuts)
 
     i_q = class_labels.index('q')
     i_s = class_labels.index('s')
     i_g = class_labels.index('g')
+    i_m = class_labels.index('m')
 
     for indices in itertools.product(*index_ranges):
         conf_mat = conf_mats[indices]
         tps[indices] = utils.N_TP(conf_mat, class_labels, label='q')        
         fps_s[indices] = conf_mat[i_s,i_q]        
         fps_g[indices] = conf_mat[i_g,i_q]
+        fps_m[indices] = conf_mat[i_m,i_q]
 
-    return tps, fps_s, fps_g
+    return tps, fps_s, fps_g, fps_m
 
 
-def objective_function(tps, fps_s, fps_g, lambda_s=3, lambda_g=1):
-    return tps - lambda_s*fps_s - lambda_g*fps_g
+def objective_function(tps, fps_s, fps_g, fps_m, lambda_s=3, lambda_g=1, lambda_m=5):
+    return tps - lambda_s*fps_s - lambda_g*fps_g - lambda_m*fps_m
 
 
 def get_best_cuts(fn_conf_mats, class_labels, fn_cuts=None):
@@ -183,8 +186,8 @@ def get_best_cuts(fn_conf_mats, class_labels, fn_cuts=None):
     intercepts_arr = np.array(results['intercepts_arr'])
     slopes = np.array(results['slopes'])
 
-    tps, fps_s, fps_g = get_metric_matrices(fn_conf_mats, class_labels)
-    objs = objective_function(tps, fps_s, fps_g)
+    tps, fps_s, fps_g, fps_m = get_metric_matrices(fn_conf_mats, class_labels)
+    objs = objective_function(tps, fps_s, fps_g, fps_m)
     indices_best = np.unravel_index(objs.argmax(), objs.shape)
     N_cuts = len(intercepts_arr)
     #cuts_min_best = [cut_arr[cc][indices_best[cc]] for cc in range(N_colors)]
