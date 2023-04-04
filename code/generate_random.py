@@ -65,7 +65,7 @@ def main():
 
     # Load and set up data
     print("Loading data")
-    fn_gaia = f'../data/gaia{tag_data}.fits'
+    fn_gaia = f'../data/gaiaQ{tag_data}.fits'
     tab_gaia = utils.load_table(fn_gaia)
     N_data = len(tab_gaia)
     ra_data, dec_data = tab_gaia['ra'], tab_gaia['dec']
