@@ -20,7 +20,7 @@ def main():
     # quasars_sdss_xgaia_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
-    mcs_xgaia(overwrite=overwrite)
+    #mcs_xgaia(overwrite=overwrite)
     #remove_duplicate_sources(overwrite=overwrite)
 
     #make_labeled_table(overwrite=overwrite)

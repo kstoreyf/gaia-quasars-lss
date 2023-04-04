@@ -10,28 +10,25 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.25_lm5'
+    tag_decontam = '_mag0.25_lm3_postpm'
     #tag_decontam = '_manual'
     #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
+    proper_motion_cut = True
 
     s = time.time()
-    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats)
+    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
     overwrite_table = True
-    #apply_to_quasar_catalog(fn_cuts, overwrite=overwrite_table)
-    #apply_to_labeled_table(fn_cuts, overwrite=overwrite_table)
+    apply_to_quasar_catalog(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
+    apply_to_labeled_table(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
 
-def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
-
-    # Full sample to apply to
-    fn_gsup = '../data/gaia_candidates_superset.fits'
-    tab_gsup = utils.load_table(fn_gsup, format='fits')
-    print(f"Number of Gaia quasar candidates with necessary data: {len(tab_gsup)}")
+def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
+            proper_motion_cut=True):
 
     # Labeled sample
     fn_labeled = '../data/labeled_superset.fits'
@@ -40,17 +37,26 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
     class_labels = ['q', 's', 'g', 'm']
     print(tab_labeled.columns)
 
+    # In theory this should be before the train test split I think, but shouldnt make much of a diff
+    if proper_motion_cut:
+        i_makes_pmcut = utils.cut_pm_G(tab_labeled)
+        print(f"Removing {np.sum(~i_makes_pmcut)} with PM cut")
+        tab_labeled = tab_labeled[i_makes_pmcut]
+
+    # this won't be exact if we've already done the pm cut, but close enough
+    i_train, _, _ = utils.split_train_val_test(tab_labeled['rand_ints'], frac_train=0.7, frac_test=0.3, frac_val=0)
+
     # Make labeled training and validation data
     color_names = ['g_w1', 'w1_w2', 'bp_g']
     X_labeled = construct_X(tab_labeled, color_names)
-    i_train, i_valid, i_test = utils.split_train_val_test(tab_labeled['rand_ints'], frac_train=0.5, frac_test=0.25, frac_val=0.25)
-    
+
     X_train = X_labeled[i_train]
     #X_valid = X_labeled[i_valid]
 
     y_labeled = tab_labeled['class']
     y_train = y_labeled[i_train]
     #y_valid = y_labeled[i_valid]
+
 
     # Get cuts
     if not os.path.exists(fn_conf_mats) or overwrite_conf_mats:
@@ -61,16 +67,16 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False):
     print("Done!")
 
     
-def apply_to_quasar_catalog(fn_cuts, overwrite=False):
+def apply_to_quasar_catalog(fn_cuts, overwrite=False, proper_motion_cut=True):
     fn_orig = '../data/gaia_candidates_superset.fits'
     fn_clean = '../data/gaia_candidates_clean.fits'
-    make_clean_subsample(fn_cuts, fn_orig, fn_clean, overwrite=overwrite)
+    make_clean_subsample(fn_cuts, fn_orig, fn_clean, proper_motion_cut=proper_motion_cut, overwrite=overwrite)
     
 
-def apply_to_labeled_table(fn_cuts, overwrite=False):
+def apply_to_labeled_table(fn_cuts, overwrite=False, proper_motion_cut=True):
     fn_orig = '../data/labeled_superset.fits'
     fn_clean = '../data/labeled_clean.fits'
-    make_clean_subsample(fn_cuts, fn_orig, fn_clean, overwrite=overwrite)
+    make_clean_subsample(fn_cuts, fn_orig, fn_clean, proper_motion_cut=proper_motion_cut, overwrite=overwrite)
     
 
 
@@ -175,7 +181,7 @@ def get_metric_matrices(fn_conf_mats, class_labels):
     return tps, fps_s, fps_g, fps_m
 
 
-def objective_function(tps, fps_s, fps_g, fps_m, lambda_s=3, lambda_g=1, lambda_m=5):
+def objective_function(tps, fps_s, fps_g, fps_m, lambda_s=3, lambda_g=1, lambda_m=3):
     return tps - lambda_s*fps_s - lambda_g*fps_g - lambda_m*fps_m
 
 
