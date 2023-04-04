@@ -24,7 +24,6 @@ def main():
     #remove_duplicate_sources(overwrite=overwrite)
 
     #make_labeled_table(overwrite=overwrite)
-    #make_quasars_sdss_clean(overwrite=overwrite)
     
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
@@ -89,14 +88,9 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
     tab_spz.keep_columns(['source_id', 'redshift_spz', 'redshift_spz_raw', 'redshift_spz_err'])
 
     tab_gaiaQ = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
-    add_randints_column(tab_gaiaQ)
+    utils.add_randints_column(tab_gaiaQ)
     tab_gaiaQ.write(fn_gaiaQ, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gaiaQ)} objects to {fn_gaiaQ}")
-
-
-def add_randints_column(tab):
-    rng = np.random.default_rng(seed=42)
-    tab['rand_ints'] = rng.choice(range(len(tab)), size=len(tab), replace=False)
 
 
 def gaia_candidates_plus_info(overwrite=False):
@@ -125,7 +119,7 @@ def gaia_candidates_plus_info(overwrite=False):
                     keys_right='t1_source_id', join_type='left')
     tab_gaia.remove_column('t1_source_id')      
 
-    add_randints_column(tab_gaia)
+    utils.add_randints_column(tab_gaia)
 
     print(tab_gaia.columns)
     tab_gaia.write(fn_gaia_plus, overwrite=overwrite)
@@ -152,7 +146,7 @@ def gaia_candidates_superset(overwrite=False):
     # Compute the color differences
     utils.add_gaia_wise_colors(tab_gsup)
 
-    add_randints_column(tab_gsup)
+    utils.add_randints_column(tab_gsup)
     print('Final superset columns:', tab_gsup.columns)
 
     tab_gsup.write(fn_gsup, overwrite=overwrite)
@@ -412,32 +406,9 @@ def make_labeled_table(overwrite=False):
     tab_labeled_sup = join(tab_labeled, tab_gsup, join_type='inner', keys='source_id')
     print(f"N={len(tab_labeled_sup)} labeled sources are in superset (out of {len(tab_labeled)}); keeping those only")
 
-    add_randints_column(tab_labeled_sup)
+    utils.add_randints_column(tab_labeled_sup)
 
     tab_labeled_sup.write(fn_labeled, overwrite=overwrite)
-
-
-def make_quasars_sdss_clean(overwrite=False):
-
-    fn_sdss_clean = '../data/quasars_sdss_clean.fits'
-
-    print("Load in data")
-    
-    fn_sdss = '../data/quasars_sdss_xgaia_xunwise_good_nodup.fits'
-    tab_sdss = utils.load_table(fn_sdss)
-
-    fn_clean = '../data/gaia_candidates_clean.fits'
-    tab_clean = utils.load_table(fn_clean)
-
-    tab_sdss.keep_columns(['source_id', 'z_sdss'])
-    tab_sdss_clean = join(tab_sdss, tab_clean, join_type='inner', keys='source_id')
-    print(f"SDSS quasars in clean Gaia sample: N={len(tab_sdss_clean)}")
-    print(tab_sdss_clean.columns)
-    
-    add_randints_column(tab_sdss_clean)
-
-    tab_sdss_clean.write(fn_sdss_clean, overwrite=overwrite)
-
 
 
 def get_gaia_xsdssfootprint(overwrite=False):

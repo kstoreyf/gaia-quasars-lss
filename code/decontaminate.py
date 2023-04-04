@@ -3,6 +3,7 @@ import numpy as np
 import os
 import time
 from numpy.random import default_rng
+from astropy.table import join
 
 from scipy.optimize import minimize, basinhopping
 
@@ -10,7 +11,7 @@ import utils
 
 
 def main():
-    tag_decontam = '_mag0.25_lm3_postpm'
+    tag_decontam = '_mag0.1_lm5_postpm'
     #tag_decontam = '_manual'
     #tag_decontam = '_mag0.1-0.01_lg1'
     overwrite_conf_mats = False
@@ -19,10 +20,10 @@ def main():
     proper_motion_cut = True
 
     s = time.time()
-    compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
+    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
     overwrite_table = True
-    apply_to_quasar_catalog(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
-    apply_to_labeled_table(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
+    apply_to_gaia_quasar_catalog(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
+    apply_to_sdss_quasars(overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
@@ -67,17 +68,29 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
     print("Done!")
 
     
-def apply_to_quasar_catalog(fn_cuts, overwrite=False, proper_motion_cut=True):
+def apply_to_gaia_quasar_catalog(fn_cuts, overwrite=False, proper_motion_cut=True):
     fn_orig = '../data/gaia_candidates_superset.fits'
     fn_clean = '../data/gaia_candidates_clean.fits'
     make_clean_subsample(fn_cuts, fn_orig, fn_clean, proper_motion_cut=proper_motion_cut, overwrite=overwrite)
     
 
-def apply_to_labeled_table(fn_cuts, overwrite=False, proper_motion_cut=True):
-    fn_orig = '../data/labeled_superset.fits'
-    fn_clean = '../data/labeled_clean.fits'
-    make_clean_subsample(fn_cuts, fn_orig, fn_clean, proper_motion_cut=proper_motion_cut, overwrite=overwrite)
+def apply_to_sdss_quasars(overwrite=False, proper_motion_cut=True):
+
+    fn_sdss_clean = '../data/quasars_sdss_clean.fits'
+
+    print("Load in data")
+    fn_sdss = '../data/quasars_sdss_xgaia_xunwise_good_nodup.fits'
+    tab_sdss = utils.load_table(fn_sdss)
+
+    fn_gaia_clean = '../data/gaia_candidates_clean.fits'
+    tab_gaia_clean = utils.load_table(fn_gaia_clean)
+
+    tab_sdss.keep_columns(['source_id', 'z_sdss', 'objid'])
+    tab_sdss_clean = join(tab_sdss, tab_gaia_clean, join_type='inner', keys='source_id')
+    print(f"SDSS quasars in clean Gaia sample: N={len(tab_sdss_clean)}")
     
+    utils.add_randints_column(tab_sdss_clean)
+    tab_sdss_clean.write(fn_sdss_clean, overwrite=overwrite)
 
 
 def compute_metrics(y_pred, y_true, class_labels):
@@ -212,8 +225,8 @@ def make_clean_subsample(fn_cuts, fn_orig, fn_clean,
                          proper_motion_cut=True, overwrite=False):
     
     # Load data
-    tab_orig = utils.load_table(fn_orig)
-
+    tab = utils.load_table(fn_orig)
+    print(tab.columns)
     #cuts = np.loadtxt(fn_cuts, delimiter=',')
     print(fn_cuts)
     cuts = np.genfromtxt(fn_cuts, delimiter=',', names=True)
@@ -224,24 +237,24 @@ def make_clean_subsample(fn_cuts, fn_orig, fn_clean,
     slopes = cuts[:,:-1]
     intercepts_best = cuts[:,-1]
 
-    # this will make sure color_names and cuts remain in proper order
-    X_orig = construct_X(tab_orig, color_names)
-    i_makes_colorcuts = utils.cuts_index(X_orig, slopes, intercepts_best)
-    tab_clean = tab_orig[i_makes_colorcuts]
-    
     # Proper motion cut
     if proper_motion_cut:
-        i_makes_pmcut = utils.cut_pm_G(tab_clean)
+        i_makes_pmcut = utils.cut_pm_G(tab)
         print(f"Removing {np.sum(~i_makes_pmcut)} with PM cut")
-        tab_clean = tab_clean[i_makes_pmcut]
+        tab = tab[i_makes_pmcut]
+        
+    # this will make sure color_names and cuts remain in proper order
+    X_orig = construct_X(tab, color_names)
+    i_makes_colorcuts = utils.cuts_index(X_orig, slopes, intercepts_best)
+    tab = tab[i_makes_colorcuts]
 
     # Add random vals
     rng = np.random.default_rng(seed=42)
-    tab_clean['rand_ints'] = rng.choice(range(len(tab_clean)), size=len(tab_clean), replace=False)
+    tab['rand_ints'] = rng.choice(range(len(tab)), size=len(tab), replace=False)
 
     # save
-    print("N_clean:", len(tab_clean))
-    tab_clean.write(fn_clean, overwrite=overwrite)
+    print("N_clean:", len(tab))
+    tab.write(fn_clean, overwrite=overwrite)
 
 
 if __name__=='__main__':

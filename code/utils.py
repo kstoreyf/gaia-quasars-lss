@@ -243,7 +243,7 @@ def Mpcperh_to_Mpc(distances_Mpcperh, cosmo):
     return distances_Mpcperh / cosmo.h
 
 
-def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
+def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name=None):
     '''
     Function to offset the "center" of a colormap. Useful for
     data with a negative min and positive max and you want the
@@ -289,7 +289,8 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
         cdict['alpha'].append((si, a, a))
 
     newcmap = matplotlib.colors.LinearSegmentedColormap(name, cdict)
-    plt.register_cmap(cmap=newcmap)
+    if name is not None:
+        plt.register_cmap(cmap=newcmap)
 
     return newcmap
 
@@ -331,6 +332,11 @@ def split_train_val_test(random_ints, N_tot=None, frac_train=None, frac_val=None
     i_test = random_ints >= int_test
 
     return i_train, i_val, i_test
+
+
+def add_randints_column(tab):
+    rng = np.random.default_rng(seed=42)
+    tab['rand_ints'] = rng.choice(range(len(tab)), size=len(tab), replace=False)
 
 
 def make_superset_cuts(tab):
