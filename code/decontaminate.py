@@ -13,7 +13,7 @@ import utils
 def main():
     tag_decontam = '_mag0.1_lm5_postpm'
     #tag_decontam = '_manual'
-    #tag_decontam = '_mag0.1-0.01_lg1'
+    #tag_decontam = '_mag0.1_wdiag'
     overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
@@ -38,7 +38,6 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
     class_labels = ['q', 's', 'g', 'm']
     print(tab_labeled.columns)
 
-    # In theory this should be before the train test split I think, but shouldnt make much of a diff
     if proper_motion_cut:
         i_makes_pmcut = utils.cut_pm_G(tab_labeled)
         print(f"Removing {np.sum(~i_makes_pmcut)} with PM cut")
@@ -194,7 +193,7 @@ def get_metric_matrices(fn_conf_mats, class_labels):
     return tps, fps_s, fps_g, fps_m
 
 
-def objective_function(tps, fps_s, fps_g, fps_m, lambda_s=3, lambda_g=1, lambda_m=3):
+def objective_function(tps, fps_s, fps_g, fps_m, lambda_s=3, lambda_g=1, lambda_m=5):
     return tps - lambda_s*fps_s - lambda_g*fps_g - lambda_m*fps_m
 
 

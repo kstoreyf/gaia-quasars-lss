@@ -18,6 +18,7 @@ def main():
     #gaia_purer_sourceids(overwrite=overwrite)
 
     # quasars_sdss_xgaia_good(overwrite=overwrite)
+    # quasars_sdss_xgaiaall_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     #mcs_xgaia(overwrite=overwrite)
@@ -34,9 +35,10 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    # G_maxs = [20.0, 20.5]
-    # for G_max in G_maxs:
-    #   merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+    G_maxs = [20.0, 20.5]
+    #G_maxs = [20.0]
+    for G_max in G_maxs:
+         merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -216,6 +218,39 @@ def quasars_sdss_xgaia_good(overwrite=False):
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
 
 
+def quasars_sdss_xgaiaall_good(overwrite=False):
+
+    fn_sdss_xgaia_good = '../data/quasars_sdss_xgaiaall_xunwiseall_good.fits'
+
+    print("Load in SDSS xgaia data")
+    fn_sdss_xgaia = '../data/quasars_sdss_xgaiaall_xunwiseall.csv'
+    tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
+    print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
+    tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
+    tab_sdss_xgaia.rename_column('dec', 'dec_unwise')
+    for column_name in list(tab_sdss_xgaia.columns):
+        new_name = column_name
+        if column_name.startswith('t1'):
+            new_name = column_name.split('t1_')[-1]
+            if new_name=='z':
+                new_name = 'z_sdss'
+        tab_sdss_xgaia.rename_column(column_name, new_name)
+
+    # Clean out super low redshift SDSS objects, and ones with bad redshifts
+    z_min = 0.01 #magic #hyperparameter
+    redshift_key = 'z_sdss'
+    idx_zgood = utils.redshift_cut_index(tab_sdss_xgaia, z_min, redshift_key)
+    print(f"Removing {np.sum(~idx_zgood)} sources with z<{z_min}")
+    tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
+    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
+    # Note that we already did zwarning cut in Gaia cross-match, so don't need to here (didn't save zwarning)
+
+    tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
+
+
+
+
 # galaxies via sdss skyserver CAS, 
 # https://skyserver.sdss.org/CasJobs/jobdetails.aspx?id=59558048&message=Details%20of%2059558048
 # SELECT
@@ -293,8 +328,6 @@ def mcs_xgaia(overwrite=False):
     fn_gaia = '../data/gaia_candidates_plus.fits.gz'
     #fn_gaia = '../data/gaia_candidates_superset.fits'
     tab_gaia = utils.load_table(fn_gaia)
-    print(len(tab_gaia))
-    print(tab_gaia.columns)
 
     coord_lmc = SkyCoord('5h23m34.5s', '-69d45m22s', frame='icrs')
     coord_smc = SkyCoord('0h52m44.8s', '-72d49m43s', frame='icrs')

@@ -26,7 +26,7 @@ def main():
     mask_mcs = False
     mask_dust = False
     tag_rand = ''
-    tag_prob_map = 'stardustm10'
+    tag_prob_map = 'stardustm10mcs'
 
     G_max = 20.5
     b_max = 10
@@ -54,18 +54,19 @@ def main():
 
     tag_data = f'_G{G_max}'
     tag_rand += tag_data
-    fn_rand = f'../data/randoms/randomQ{tag_rand}_{fac_rand}x.fits'
+    #fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
+    fn_rand = f'../data/randoms/random_G{G_max}_{fac_rand}x.fits'
     overwrite = True
-
     NSIDE_masks = 64
     rng = default_rng(seed=42)
     fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
     fn_starmap = f'../data/stardensmap_NSIDE{NSIDE_starmap}.npy'
-    fn_probmap = f'../data/maps/mapQ_probability_dust_stars_m10_NSIDE{NSIDE_probmap}_G{G_max}.fits'
+    #fn_probmap = f'../data/maps/map_probability_dust_stars_m10_mcs_NSIDE{NSIDE_probmap}_G{G_max}.fits'
+    fn_probmap = f'../data/maps/selection_function_NSIDE{NSIDE_probmap}_G{G_max}.fits'
 
     # Load and set up data
     print("Loading data")
-    fn_gaia = f'../data/gaiaQ{tag_data}.fits'
+    fn_gaia = f'../data/catalog{tag_data}.fits'
     tab_gaia = utils.load_table(fn_gaia)
     N_data = len(tab_gaia)
     ra_data, dec_data = tab_gaia['ra'], tab_gaia['dec']

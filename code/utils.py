@@ -196,11 +196,10 @@ def spherical_to_cartesian(r, theta, phi):
     z       =  r*np.cos(phi)
     return np.array([x, y, z])
 
-
+# changed this! fix surrounding code if this breaks
 def spherical_to_radec(theta, phi):
     ra = theta * 180/np.pi #+ 180
     #dec = phi * 180/np.pi - 90  
-    print("utils.spherical_to_radec: changed this! fix surrounding code if this breaks")
     dec = 90 - phi * 180/np.pi
     return ra, dec 
 
@@ -436,3 +435,10 @@ def get_classes(s_ids_pred_target, s_ids_valid, c_valid, target='q'):
     c_pred = np.full(len(c_valid), 'o')
     c_pred[i_in_pred] = target
     return c_pred
+
+
+def compute_rmse(y_pred, y_true, fractional=False):
+    diffs = y_pred - y_true
+    if fractional:
+        diffs /= y_true
+    return np.sqrt(np.mean(diffs**2))

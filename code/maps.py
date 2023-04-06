@@ -23,8 +23,10 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
 
     NPIX = hp.nside2npix(NSIDE)
     if type(ra) == u.Quantity:
+        ra = ra.to('deg')
         ra = ra.value
     if type(dec) == u.Quantity:
+        dec = dec.to('deg')
         dec = dec.value
     pixel_indices = hp.ang2pix(NSIDE, ra, dec, lonlat=True)
 
@@ -51,7 +53,8 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
     return map, pixel_indices
 
     
-def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'):
+def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz',
+                reverse=True):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"Star map already exists, loading from {fn_map}")
         return np.load(fn_map)
@@ -65,6 +68,57 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
         np.save(fn_map, map_stars)
         print(f"Saved star map to {fn_map}")
     return map_stars
+
+
+def get_mcs_map(NSIDE, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz',
+                fn_starmap=None):
+    if fn_map is not None and os.path.exists(fn_map):
+        print(f"MCs map already exists, loading from {fn_map}")
+        return np.load(fn_map)
+    assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
+    
+    if fn_starmap is None:
+        fn_starmap = f'../data/maps/map_stars_NSIDE{NSIDE}.npy'
+
+    from astropy.coordinates import Galactic, ICRS
+
+    fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'
+    tab_stars = utils.load_table(fn_stars)
+
+    cat = SkyCoord(tab_stars['ra'], tab_stars['dec'], frame='icrs')
+    cat_galactic = cat.transform_to(Galactic())
+    cat_galactic_reversed = SkyCoord(360*u.deg-cat_galactic.l, cat_galactic.b, frame='galactic')
+    cat_reversed = cat_galactic_reversed.transform_to(ICRS())
+
+    map_stars_reversed, _ = get_map(NSIDE, cat_reversed.ra.value*u.deg, cat_reversed.dec.value*u.deg, 
+                                        func_name='count', null_val=0)
+
+    map_stars = get_star_map(NSIDE=NSIDE, fn_map=fn_starmap)
+    map_mcs = map_stars - map_stars_reversed
+
+    coord_lmc = SkyCoord('5h23m34.5s', '-69d45m22s', frame='icrs')
+    coord_smc = SkyCoord('0h52m44.8s', '-72d49m43s', frame='icrs')
+
+    sep_max_lmc = 9*u.deg
+    sep_max_smc = 5*u.deg
+
+    vec_lmc = hp.ang2vec(coord_lmc.ra.value, coord_lmc.dec.value, lonlat=True)
+    vec_smc = hp.ang2vec(coord_smc.ra.value, coord_smc.dec.value, lonlat=True)
+    # returns list of indices (not booleans)
+    ipix_lmc = hp.query_disc(nside=NSIDE, vec=vec_lmc, radius=sep_max_lmc.to('radian').value)
+    ipix_smc = hp.query_disc(nside=NSIDE, vec=vec_smc, radius=sep_max_smc.to('radian').value)
+
+    i_mcs = np.full(len(map_mcs), False)
+    i_mcs[ipix_lmc] = True
+    i_mcs[ipix_smc] = True
+
+    map_mcs[~i_mcs] = 0.0
+    
+    if fn_map is not None:
+        np.save(fn_map, map_mcs)
+        print(f"Saved MCs map to {fn_map}")
+    return map_mcs
+
 
 ### Completeness / M10 selection function model map functions
 
@@ -103,11 +157,11 @@ def fetch_dustmap(map_name='sfd', data_dir='../data/dustmaps'):
 
 
 
-def get_dust_map(NSIDE=None, R=None, fn_map=None):
+def get_dust_map(NSIDE=None, R=3.1, fn_map=None):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"Dustmap already exists, loading from {fn_map}")
         return np.load(fn_map)
-    assert NSIDE is not None and R is not None, f"{fn_map} doesn't exist; must pass NSIDE and R to generate!"
+    assert NSIDE is not None and R is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     print(f"Generating new dust map ({fn_map})")
     # fix this NSIDE to make dust map determinisitic 
     NSIDE_high = 2048
