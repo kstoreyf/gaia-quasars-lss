@@ -17,8 +17,8 @@ def main():
     #sdss_slim(overwrite=overwrite)
     #gaia_purer_sourceids(overwrite=overwrite)
 
-    # quasars_sdss_xgaia_good(overwrite=overwrite)
-    # quasars_sdss_xgaiaall_good(overwrite=overwrite)
+    #quasars_sdss_xgaia_good(overwrite=overwrite)
+    quasars_sdss_xgaiaall_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     #mcs_xgaia(overwrite=overwrite)
@@ -35,10 +35,10 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    G_maxs = [20.0, 20.5]
+    #G_maxs = [20.0, 20.5]
     #G_maxs = [20.0]
-    for G_max in G_maxs:
-         merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+    #for G_max in G_maxs:
+    #     merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -58,7 +58,7 @@ def gaia_purer_sourceids(overwrite=False):
 
 def sdss_slim(overwrite=False):
     # save name
-    fn_sdss_slim = '../data/sdss_slim.fits'
+    fn_sdss_slim = '../data/SDSS_DR16Q_v4_slim.fits'
    
     # data paths 
     fn_sdss = '../data/SDSS_DR16Q_v4.fits'
@@ -68,8 +68,20 @@ def sdss_slim(overwrite=False):
     tab_sdss = utils.load_table(fn_sdss)
 
     # Create and save
-    columns_to_keep = ['SDSS_NAME', 'OBJID', 'THING_ID', 'RA', 'DEC', 'Z', 'ZWARNING']
-    save_slim_table(tab_sdss, columns_to_keep, fn_sdss_slim, overwrite=overwrite)
+    columns_to_keep = ['SDSS_NAME', 'OBJID', 'THING_ID', 'RA', 'DEC', 'Z', 'ZWARNING', 'PSFMAG', 'PSFMAGERR']
+    tab_sdss.keep_columns(columns_to_keep)
+
+    psfmag_names = ['u', 'g', 'r', 'i', 'z']
+    for i, pn in enumerate(psfmag_names):
+        tab_sdss[f'{pn}_mag_sdss'] = tab_sdss['PSFMAG'][:,i]
+        tab_sdss[f'{pn}_mag_err_sdss'] = tab_sdss['PSFMAGERR'][:,i]
+
+    tab_sdss.remove_column('PSFMAG')
+    tab_sdss.remove_column('PSFMAGERR')
+    print(tab_sdss.columns)
+
+    tab_sdss.write(fn_sdss_slim, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_sdss)} objects to {fn_sdss_slim}")
 
 
 def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz_kNN_K27_std.fits',
@@ -223,7 +235,7 @@ def quasars_sdss_xgaiaall_good(overwrite=False):
     fn_sdss_xgaia_good = '../data/quasars_sdss_xgaiaall_xunwiseall_good.fits'
 
     print("Load in SDSS xgaia data")
-    fn_sdss_xgaia = '../data/quasars_sdss_xgaiaall_xunwiseall.csv'
+    fn_sdss_xgaia = '../data/quasars_sdss_xgaiaall_sdssphot_xunwiseall.csv'
     tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
     tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
@@ -244,6 +256,17 @@ def quasars_sdss_xgaiaall_good(overwrite=False):
     tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
     print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
     # Note that we already did zwarning cut in Gaia cross-match, so don't need to here (didn't save zwarning)
+
+    # get the SDSS photometry that we dropped in the initial gaia cross-match 
+    # fn_sdss_full = '../data/SDSS_DR16Q_v4.fits'
+    # tab_sdss_full = Table.read(fn_sdss_full, format='fits')
+    # tab_sdss_full.keep_columns(['OBJID', 'PSFMAG'])
+    # tab_sdss_full.rename_column('OBJID', 'objid')
+    # print(len(tab_sdss_xgaia))
+    # print(np.sum(np.isfinite(tab_sdss_xgaia['objid'])))
+    # tab_sdss_xgaia = join(tab_sdss_xgaia, tab_sdss_full, keys='objid', join_type='left')
+    # print(np.sum(tab_sdss_xgaia['PSFMAG']))
+    print(tab_sdss_xgaia.columns)
 
     tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
