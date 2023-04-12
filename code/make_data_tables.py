@@ -18,7 +18,7 @@ def main():
     #gaia_purer_sourceids(overwrite=overwrite)
 
     #quasars_sdss_xgaia_good(overwrite=overwrite)
-    quasars_sdss_xgaiaall_good(overwrite=overwrite)
+    #quasars_sdss_xgaiaall_good(overwrite=overwrite)
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     #mcs_xgaia(overwrite=overwrite)
@@ -39,6 +39,8 @@ def main():
     #G_maxs = [20.0]
     #for G_max in G_maxs:
     #     merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+
+    make_public_catalog(G_max=20.0, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -88,7 +90,7 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
                                 G_max=20.5, overwrite=False):
 
     # save name
-    fn_gaiaQ = f'../data/gaiaQ_G{G_max}.fits'
+    fn_gcat = f'../data/catalog_G{G_max}.fits'
 
     # data paths
     fn_gaia = '../data/gaia_candidates_clean.fits'
@@ -101,10 +103,46 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
     tab_spz = utils.load_table(fn_spz)
     tab_spz.keep_columns(['source_id', 'redshift_spz', 'redshift_spz_raw', 'redshift_spz_err'])
 
-    tab_gaiaQ = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
-    utils.add_randints_column(tab_gaiaQ)
-    tab_gaiaQ.write(fn_gaiaQ, overwrite=overwrite)
-    print(f"Wrote table with {len(tab_gaiaQ)} objects to {fn_gaiaQ}")
+    tab_gcat = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
+    utils.add_randints_column(tab_gcat)
+    tab_gcat.write(fn_gaiaQ, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_gcat)} objects to {fn_gcat}")
+
+
+
+def make_public_catalog(G_max=20.5, overwrite=False):
+
+    # working catalog
+    fn_gcat = f'../data/catalog_G{G_max}.fits'
+    # update to final name choice!
+    fn_public = f'../data/QUaia_G{G_max}.fits'
+
+    tab_gcat = utils.load_table(fn_gcat)
+
+    columns_to_keep = ['source_id', 'unwise_objid', 
+                       'redshift_spz', 'redshift_spz_err', 
+                       'ra', 'dec', 'l', 'b', 
+                       'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                       'mag_w1_vg', 'mag_w2_vg', 
+                       'pm', 'pmra', 'pmdec', 'pmra_error', 'pmdec_error']
+
+    # tab_public = Table(names=columns_to_keep, units=utils.label2unit_dict,
+    #             descriptions=utils.label2description_dict)
+    tab_public = Table()
+    tab_public.meta = {'name': 'Quasars with unWISE and \emph{{Gaia}} Catalog',
+                       'abbrv': 'QUaia'
+                       }
+    for cn in columns_to_keep:
+        tab_public[cn] = tab_gcat[cn]
+        tab_public[cn].info.unit = utils.label2unit_dict[cn]
+        tab_public[cn].info.description = utils.label2description_dict[cn]
+    
+    # for tc in tab_public.columns:
+    #     print(tc, tab_public[tc].info.unit)
+    #print(tab_public)
+    tab_public.write(fn_public, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
+
 
 
 def gaia_candidates_plus_info(overwrite=False):
@@ -138,6 +176,7 @@ def gaia_candidates_plus_info(overwrite=False):
     print(tab_gaia.columns)
     tab_gaia.write(fn_gaia_plus, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gaia)} objects to {fn_gaia_plus}")
+
 
 
 def gaia_candidates_superset(overwrite=False):
@@ -382,10 +421,7 @@ def remove_duplicate_sources(overwrite=False):
     fn_quasars = '../data/quasars_sdss_xgaia_xunwise_good.fits'
     fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
     fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
-
-    fn_mcs = '../data/mcs_xgaia.fits'
-    tab_mcs = utils.load_table(fn_mcs)
-    print(len(tab_mcs))
+    # don't need to include MCs here bc there is no overlap bw MCs and SDSS
 
     fns = [fn_quasars, fn_galaxies, fn_stars]
     source_ids = []
@@ -453,7 +489,7 @@ def make_labeled_table(overwrite=False):
 
     tab_labeled = vstack([tab_squasars, tab_sstars, tab_sgals, tab_mcs], metadata_conflicts='silent')
 
-    # Only keep labeled data that are also in our wnec sample
+    # Only keep labeled data that are also in our superset
     # Now that I'm only using the labeled data in wnec, i didn't need to do separate xgaia and xwise 
     # cross-matches :/ could have just crossmatched SDSS data to QSO sample. 
     # (Still useful for plotting so it's ok!)
