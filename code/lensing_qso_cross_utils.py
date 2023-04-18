@@ -2,17 +2,22 @@ import numpy as np
 import pymaster as nmt
 import healpy as hp
 
-def make_counts(nside,l,b,weight=None):
+def make_counts(nside,l,b,weight=None,mean_counts=False):
     counts=np.zeros(hp.nside2npix(nside))
     pix = hp.ang2pix(nside,l,b,lonlat=True)
     if weight is None:
         for p in pix:
             counts[p]+=1    
     else:
+        nobs = np.zeros_like(counts)
         i=0
         for p in pix:
             counts[p]+=weight[i]
             i+=1
+            nobs[p]+=1
+        if mean_counts:
+            counts[counts!=0]/=nobs[counts!=0]
+        print(np.sum(counts),np.sum(nobs))
     return counts
 
 def define_binning(lmin,lmax,delta_b,nside,weighting='ivar'):
@@ -72,7 +77,7 @@ def compute_master(f_a, f_b, wsp):
     return cl_decoupled
 
 
-def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th,cls_kg_th):
+def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None):
     
     nside = hp.npix2nside(len(klr))
     klm = hp.map2alm(klr,iter=1,pol=False)
@@ -103,11 +108,13 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
     clg1g2 = compute_master(f11, f12, w)[0]
     clkgjk = compute_master(f0, fjk, w)[0]
     clgjk = compute_master(fjk, fjk, w)[0]
-    
-    cl_gg_th_binned = w.decouple_cell(w.couple_cell([cls_gg_th]))[0]
-    cl_kg_th_binned = w.decouple_cell(w.couple_cell([cls_kg_th]))[0]
-    cl_kk_th_binned = w.decouple_cell(w.couple_cell([hp.alm2cl(klm)]))[0]    
-    return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk,cl_gg_th_binned,cl_kg_th_binned,cl_kk_th_binned
+    if ((cls_gg_th is None) and (cls_kg_th is None)):
+        return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk
+    else:
+        cl_gg_th_binned = w.decouple_cell(w.couple_cell([cls_gg_th]))[0]
+        cl_kg_th_binned = w.decouple_cell(w.couple_cell([cls_kg_th]))[0]
+        cl_kk_th_binned = w.decouple_cell(w.couple_cell([hp.alm2cl(klm)]))[0]    
+        return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk,cl_gg_th_binned,cl_kg_th_binned,cl_kk_th_binned
 
 
 def overdensity_from_counts(m,footprint,verbose=False):
@@ -131,3 +138,48 @@ def get_magellanic_cloud_mask(nside,r_mclouds=[4,2]):
     		mcpix = hp.query_disc(nside,hp.ang2vec(lmc[0],lmc[1],lonlat=True),np.deg2rad(r_mclouds[i]))
     		mclouds_mask[mcpix]=0.
 	return mclouds_mask
+
+def extrapolpixwin(nside, Slmax, pixwin=True):
+    '''
+    Parameters
+    ----------
+    nside : int 
+        Healpix map resolution
+    Slmax : int 
+        Maximum multipole value computed for the pixel covariance pixel matrix
+    pixwin : bool
+        If True, multiplies the beam window function by the pixel
+        window function. Default: True
+        
+    Returns
+    ----------
+    fpixwin : array of floats
+
+    Example :
+    ----------
+    >>> print(hp.pixwin(2))
+    [ 1.          0.977303    0.93310702  0.86971852  0.79038278  0.69905215
+      0.60011811  0.49813949  0.39760902]
+    >>> print(extrapolpixwin(2, 20, True)) 
+    [  1.00000000e+00   9.77303000e-01   9.33107017e-01   8.69718524e-01
+       7.90382779e-01   6.99052151e-01   6.00118114e-01   4.98139486e-01
+       3.97609016e-01   3.07026358e-01   2.27432772e-01   1.61472532e-01
+       1.09618639e-01   7.09875545e-02   4.37485835e-02   2.55977424e-02
+       1.41862346e-02   7.42903370e-03   3.66749182e-03   1.70274467e-03
+       7.41729191e-04]
+    >>> print(extrapolpixwin(2, 20, False))
+    [ 1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.
+      1.  1.  1.]
+    '''
+    if pixwin:
+        prepixwin = np.array(hp.pixwin(nside))
+        poly = np.polyfit(np.arange(len(prepixwin)), np.log(prepixwin),
+                          deg=3, w=np.sqrt(prepixwin))
+        y_int = np.polyval(poly, np.arange(Slmax+1))
+        fpixwin = np.exp(y_int)
+        fpixwin = np.append(prepixwin, fpixwin[len(prepixwin):])[:Slmax+1]
+    else:
+        fpixwin = np.ones((Slmax+1))
+
+    return fpixwin
+
