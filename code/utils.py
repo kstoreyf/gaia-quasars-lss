@@ -442,3 +442,90 @@ def compute_rmse(y_pred, y_true, fractional=False):
     if fractional:
         diffs /= y_true
     return np.sqrt(np.mean(diffs**2))
+
+
+### table details
+
+label2unit_dict = {'source_id': None,
+        'unwise_objid': None,
+        'redshift_spz': None,
+        'redshift_spz_err': None,
+        'ra': 'deg',
+        'dec': 'deg', 
+        'l': 'deg',
+        'b': 'deg',
+        'phot_g_mean_mag': 'mag',
+        'phot_bp_mean_mag': 'mag',
+        'phot_rp_mean_mag': 'mag',
+        'mag_w1_vg': 'mag',
+        'mag_w2_vg': 'mag',
+        'pm': 'mas yr-1',
+        'pmra': 'mas yr-1',
+        'pmdec': 'mas yr-1',
+        'pmra_error': 'mas yr-1',
+        'pmdec_error': 'mas yr-1',
+        }
+
+unit2latex_dict = {'mas yr-1': 'mas yr$^{-1}$',
+                   'None': ''}
+
+label2description_dict = {'source_id': '\emph{Gaia} DR3 source identifier',
+        'unwise_objid': 'unWISE DR1 source identifier',
+        'redshift_spz': 'spectro-photometric redshift estimate',
+        'redshift_spz_err': 'uncertainty on spectro-photometric redshift estimate',
+        'ra': 'right ascension',
+        'dec': 'declination', 
+        'l': 'galactic longitude',
+        'b': 'galactic latitude',
+        'phot_g_mean_mag': '\emph{Gaia} $G$-band mean magnitude',
+        'phot_bp_mean_mag': '\emph{Gaia} integrated $BP$ mean magnitude',
+        'phot_rp_mean_mag': '\emph{Gaia} integrated $RP$ mean magnitude',
+        'mag_w1_vg': 'unWISE $W1$ magnitude',
+        'mag_w2_vg': 'unWISE $W2$ magnitude',
+        'pm': 'proper motion',
+        'pmra': 'proper motion in right ascension direction',
+        'pmdec': 'proper motion in declination direction',
+        'pmra_error': 'standard error of proper motion in right ascension direction',
+        'pmdec_error': 'standard error of proper motion in declination direction',
+        }
+
+label2format_dict = {'source_id': 'd',
+            'unwise_objid': 's',
+            'redshift_spz': 'f',
+            'redshift_spz_err': 'f',
+            'ra': 'f',
+            'dec': 'f', 
+            'l': 'f',
+            'b': 'f',
+            'phot_g_mean_mag': 'f',
+            'phot_bp_mean_mag': 'f',
+            'phot_rp_mean_mag': 'f',
+            'mag_w1_vg': 'f',
+            'mag_w2_vg': 'f',
+            'pm': 'f',
+            'pmra': 'f',
+            'pmdec': 'f',
+            'pmra_error': 'f',
+            'pmdec_error': 'f',
+            }
+
+label2symbol_dict = {'source_id': '',
+            'unwise_objid': '',
+            'redshift_spz': '$z_\mathrm{SPZ}$',
+            'redshift_spz_err': '$\sigma_{z\mathrm{SPZ}}$',
+            'ra': '',
+            'dec': '', 
+            'l': '',
+            'b': '',
+            'phot_g_mean_mag': '$G$',
+            'phot_bp_mean_mag': '$BP$',
+            'phot_rp_mean_mag': '$RP$',
+            'mag_w1_vg': '$W1$',
+            'mag_w2_vg': '$W2$',
+            'pm': '$\mu$',
+            'pmra': '$\mu_{\\alpha*}$',
+            'pmdec': '$\mu_{\delta}$',
+            'pmra_error': '$\sigma_{\mu\\alpha*}$',
+            'pmdec_error': '$\sigma_{\mu\delta}$',
+            }
+
