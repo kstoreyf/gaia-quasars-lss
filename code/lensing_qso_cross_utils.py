@@ -1,6 +1,8 @@
 import numpy as np
 import pymaster as nmt
 import healpy as hp
+from astropy.io import fits
+from astropy.coordinates import SkyCoord
 
 def make_counts(nside,l,b,weight=None,mean_counts=False):
     counts=np.zeros(hp.nside2npix(nside))
@@ -17,7 +19,7 @@ def make_counts(nside,l,b,weight=None,mean_counts=False):
             nobs[p]+=1
         if mean_counts:
             counts[counts!=0]/=nobs[counts!=0]
-        print(np.sum(counts),np.sum(nobs))
+        #print(np.sum(counts),np.sum(nobs))
     return counts
 
 def define_binning(lmin,lmax,delta_b,nside,weighting='ivar'):
@@ -182,4 +184,24 @@ def extrapolpixwin(nside, Slmax, pixwin=True):
         fpixwin = np.ones((Slmax+1))
 
     return fpixwin
+
+def prepare_gaia_catalog(gaia_fname,verbose=False,snr_zcut=0.):# Prepare raw GAIA data
+    if verbose:
+        print("Read catalog and convert coordinate")
+    d=fits.open(gaia_fname)
+
+    z = d[1].data['redshift_spz']
+    try:
+        zerr = d[1].data['redshift_spz_err']
+        snr = z/zerr
+    except:
+        # works for old routines
+        zerr=np.zeros(len(z))
+        snr = 3*np.ones(len(z))
+    sc = SkyCoord(ra=d[1].data["ra"], dec=d[1].data["dec"], unit='deg', frame='icrs', equinox='J2000.0')
+    gs = sc.transform_to(frame='galactic')
+    l = gs.l.value[snr>snr_zcut] 
+    b = gs.b.value[snr>snr_zcut] 
+    nqso = len(l)
+    return z[snr>snr_zcut] ,zerr[snr>snr_zcut] ,l,b,nqso
 
