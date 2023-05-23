@@ -528,3 +528,4 @@ label2symbol_dict = {'source_id': '',
             'pmra_error': '$\sigma_{\mu\\alpha*}$',
             'pmdec_error': '$\sigma_{\mu\delta}$',
             }
+
