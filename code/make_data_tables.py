@@ -36,11 +36,11 @@ def main():
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
     #G_maxs = [20.0, 20.5]
-    #G_maxs = [20.0]
-    #for G_max in G_maxs:
-    #     merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+    G_maxs = [20.6]
+    for G_max in G_maxs:
+         merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
-    make_public_catalog(G_max=20.0, overwrite=overwrite)
+    make_public_catalog(G_max=20.6, overwrite=overwrite)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -105,7 +105,7 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
 
     tab_gcat = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
     utils.add_randints_column(tab_gcat)
-    tab_gcat.write(fn_gaiaQ, overwrite=overwrite)
+    tab_gcat.write(fn_gcat, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gcat)} objects to {fn_gcat}")
 
 

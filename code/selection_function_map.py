@@ -11,45 +11,53 @@ import maps
 
 
 def main():
-
+    print("starting selection function", flush=True)
 
     map_names = ['dust', 'stars', 'm10', 'mcs']
     #map_names = ['dust', 'stars']
     NSIDE = 64
-    G_max = 20.5
-    #G_max = 20.0
+    #G_max = 20.5
+    G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
+    fit_zeros = False
     #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_testing.fits"
     #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_op_p0nparams.fits"
     #fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_runlong.fits"
+    #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
     fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}.fits"
     overwrite = True
 
     start = time.time()
 
-    print("Loading data")
+    print("Loading data", flush=True)
     fn_gaia = f'../data/catalog_G{G_max}.fits' 
     #fn_gaia = f'../data/gaia_clean.fits' 
     tab_gaia = utils.load_table(fn_gaia)
 
-    print("Making QSO map")
+    print("Making QSO map", flush=True)
     maps_forsel = load_maps(NSIDE, map_names)
     map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
 
-    print("Constructing X and y")
+    print("Constructing X and y", flush=True)
     NPIX = hp.nside2npix(NSIDE)
     X_train_full = construct_X(NPIX, map_names, maps_forsel)
     y_train_full = map_nqso_data
-    y_err_train_full = np.sqrt(y_train_full) # assume poission error
+    # need this because will be inserting small vals where zero
+    y_train_full = y_train_full.astype(float)
 
-    print("Getting indices to fit")
+    print("Getting indices to fit", flush=True)
     # should i do this in fitter??
-    if y_scale_name=='log':
-        idx_fit = y_train_full > 0 #hack
-    else:
+    if fit_zeros:
+        if y_scale_name=='log':
+            idx_zero = np.abs(y_train_full) < 1e-4
+            print('num zeros:', np.sum(idx_zero))
+            y_train_full[idx_zero] = 0.5       # set zeros to 1/2 a star
         idx_fit = np.full(len(y_train_full), True)
+        print('min post', np.min(y_train_full), flush=True)
+    else:
+        idx_fit = y_train_full > 0
 
     if fit_with_mask_mcs:
         mask_mcs = masks.magellanic_clouds_mask(NSIDE)
@@ -57,35 +65,37 @@ def main():
         # i think nomcs is breaking everything! #TODO check
         idx_fit = idx_fit & idx_nomcs
 
-    # FOR TEST
-    #idx_fit[10000:] = False
+    y_err_train_full = np.sqrt(y_train_full) # assume poission error
 
-    print()
+    # FOR TEST
+    #print("46k TEST")
+    #idx_fit[46000:] = False
 
     X_train = X_train_full[idx_fit]
     y_train = y_train_full[idx_fit]
     y_err_train = y_err_train_full[idx_fit]
+    print(np.min(y_train))
 
-    print("Training fitter")
-    print("X_train:", X_train.shape, "y_train:", y_train.shape)
+    print("Training fitter", flush=True)
+    print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
     fitter = FitterGP(X_train, y_train, y_err_train, 
                       x_scale_name=x_scale_name, y_scale_name=y_scale_name)
     fitter.train()
-    print("Predicting")
+    print("Predicting", flush=True)
     y_pred = fitter.predict(X_train)
 
     y_pred_full = np.zeros(y_train_full.shape)
     y_pred_full[idx_fit] = y_pred
 
-    print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full))
+    print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
 
-    print("Making probability map")
+    print("Making probability map", flush=True)
     map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel)
     hp.write_map(fn_prob, map_prob, overwrite=overwrite)
-    print(f"Saved map to {fn_prob}!")
+    print(f"Saved map to {fn_prob}!", flush=True)
 
     end = time.time()
-    print(f"Time: {end-start} s ({(end-start)/60.} min)")
+    print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
 
 
 #hack! better way?
@@ -138,15 +148,8 @@ def f_m10(map_m):
 
 def f_mcs(map_mcs):
     map_mcs = map_mcs.astype(float)
-    #rng = np.random.default_rng(42)
-    #map_mcs += rng.normal(loc=0, scale=0.1, size=len(map_mcs))
-    print(np.min(map_mcs), np.max(map_mcs))
-    #i_zeroorneg = map_mcs < 1.001
-    #map_mcs[i_zeroorneg] = 1.001
     i_zeroorneg = map_mcs < 1e-4
     map_mcs[i_zeroorneg] = 1e-4
-    print(np.min(map_mcs), np.max(map_mcs))
-    print(np.min(np.log(map_mcs)), np.max(np.log(map_mcs)))
     return np.log(map_mcs)
 
 
@@ -155,12 +158,6 @@ def construct_X(NPIX, map_names, maps_forsel):
              'stars': f_stars,
              'm10': f_m10,
              'mcs': f_mcs}
-
-    # constant = np.ones(NPIX)
-    # X_full = np.atleast_2d(constant)
-    # for map_name, map in zip(map_names, maps_forsel):
-    #     X_full = np.vstack((X_full, f_dict[map_name](map)))
-    # return X_full.T
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
     return X.T
 
@@ -193,8 +190,6 @@ class Fitter():
     def scale_X(self, X):
         X_scaled = X.copy()
         if self.x_scale_name=='zeromean':
-            # assumes starts with constant feature! #hack
-            #X_scaled[:,1:] -= np.mean(X_scaled[:,1:], axis=0)
             X_scaled -= np.mean(X_scaled, axis=0)
         return X_scaled
 
@@ -231,11 +226,14 @@ class FitterGP(Fitter):
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
         p0 = np.exp(np.full(n_params, 0.1))
-        #p0 = 0.1
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
+        #print("using hodlr solver")
+        #self.gp = george.GP(kernel, solver=george.HODLRSolver)
         self.gp = george.GP(kernel)
         print('p init:', self.gp.get_parameter_vector())
+        print(self.X_train_scaled)
+        print(self.y_err_train_scaled)
         self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
         print('p compute:', self.gp.get_parameter_vector())
         print('lnlike compute:', self.gp.log_likelihood(self.y_train_scaled))
