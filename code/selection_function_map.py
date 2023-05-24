@@ -16,23 +16,23 @@ def main():
     map_names = ['dust', 'stars', 'm10', 'mcs']
     #map_names = ['dust', 'stars']
     NSIDE = 64
-    #G_max = 20.5
-    G_max = 20.0
+    G_max = 20.5
+    #G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
     fit_zeros = False
-    #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_testing.fits"
-    #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_op_p0nparams.fits"
-    #fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_runlong.fits"
+
+    tag_cat = '_zsplit3bin2'
     #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
-    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}.fits"
+    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}.fits"
     overwrite = True
 
     start = time.time()
 
     print("Loading data", flush=True)
-    fn_gaia = f'../data/catalog_G{G_max}.fits' 
+    #fn_gaia = f'../data/catalog_G{G_max}.fits' 
+    fn_gaia = f'../data/QUaia_G{G_max}{tag_cat}.fits' 
     #fn_gaia = f'../data/gaia_clean.fits' 
     tab_gaia = utils.load_table(fn_gaia)
 

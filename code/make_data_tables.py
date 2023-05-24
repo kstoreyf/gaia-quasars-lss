@@ -36,11 +36,15 @@ def main():
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
     #G_maxs = [20.0, 20.5]
-    G_maxs = [20.6]
-    for G_max in G_maxs:
-         merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+    # G_maxs = [20.6]
+    # for G_max in G_maxs:
+    #      merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
 
-    make_public_catalog(G_max=20.6, overwrite=overwrite)
+    # make_public_catalog(G_max=20.6, overwrite=overwrite)
+
+    G_max = 20.5
+    n_zbins = 3
+    make_redshift_split_catalogs(G_max, n_zbins)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -144,6 +148,27 @@ def make_public_catalog(G_max=20.5, overwrite=False):
     print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
 
 
+def make_redshift_split_catalogs(G_max, n_zbins, overwrite=True):
+
+    fn_gcat = f'../data/QUaia_G{G_max}.fits'
+    tab_gcat = utils.load_table(fn_gcat)
+    z_percentiles = np.linspace(0.0, 100.0, n_zbins+1)
+    print(z_percentiles)
+    z_bins = np.percentile(list(tab_gcat['redshift_spz']), z_percentiles)
+    z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
+    print("zbins:", z_bins)
+
+    for bb in range(n_zbins):
+        i_zbin = (tab_gcat['redshift_spz'] >= z_bins[bb]) & (tab_gcat['redshift_spz'] < z_bins[bb+1])
+        tab_gcat_zbin = tab_gcat[i_zbin]
+        fn_gcat_zbin = f'../data/QUaia_G{G_max}_zsplit{n_zbins}bin{bb}.fits'
+        tab_gcat_zbin.write(fn_gcat_zbin, overwrite=overwrite)
+        print("zmin:", np.min(tab_gcat_zbin['redshift_spz']))
+        print("zmax:", np.max(tab_gcat_zbin['redshift_spz']))
+        print(f"Wrote table with {len(tab_gcat_zbin)} objects to {fn_gcat_zbin}")
+
+
+
 
 def gaia_candidates_plus_info(overwrite=False):
 
@@ -205,32 +230,6 @@ def gaia_candidates_superset(overwrite=False):
     tab_gsup.write(fn_gsup, overwrite=overwrite)
     print(f"Wrote table with {len(tab_gsup)} objects to {fn_gsup}")
 
-
-# MOVED TO DECONTAMINATE
-def gaia_candidates_clean(overwrite=False):
-    
-    fn_gaia_clean = '../data/gaia_candidates_clean.fits'
-
-    fn_gaia = '../data/gaia_candidates_superset.fits'
-    # Load data
-    print("Loading data")
-    tab_gaia = utils.load_table(fn_gaia)
-    print('N_gaia:', len(tab_gaia))
-
-    fn_model = f'../data/decontamination_models/model_2lines_straight_lambda0.1.npy'
-    color_cuts = np.loadtxt(fn_model)
-
-    print("Making color cuts")
-    g_w1 = tab_gaia['phot_g_mean_mag'] - tab_gaia['mag_w1_vg']
-    w1_w2 = tab_gaia['mag_w1_vg'] - tab_gaia['mag_w2_vg']
-    idx_clean = utils.gw1_w1w2_cuts_index(g_w1, w1_w2, color_cuts) 
-    tab_gaia_clean = tab_gaia[idx_clean]
-
-    rng = np.random.default_rng(seed=42)
-    tab_gaia_clean['rand_ints'] = rng.choice(range(len(tab_gaia_clean)), size=len(tab_gaia_clean), replace=False)
-
-    print("N_clean:", len(tab_gaia_clean))
-    tab_gaia_clean.write(fn_gaia_clean, overwrite=overwrite)
 
 
 def quasars_sdss_xgaia_good(overwrite=False):
@@ -548,11 +547,6 @@ def make_labeled_sdssfootprint_table():
     fn_xsdssfootprint = '../data/gaia_candidates_xsdssfootprint.fits'
     tab_gcand_xsdssfootprint = utils.load_table(fn_xsdssfootprint)
     print(f"Number of Gaia quasar candidates in SDSS footprint: {len(tab_gcand_xsdssfootprint)}")
-
-
-
-def make_labeled_spz_set():
-    pass
 
 
 
