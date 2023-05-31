@@ -54,18 +54,21 @@ def define_binning(lmin,lmax,delta_b,nside,weighting='ivar'):
 
     return b
 
-def get_custom_binning(delta_b=20,delta_b_high_l=50,lmax_transition=100,nside=256,lmax=767):
+def get_custom_binning(delta_b=20,delta_b_high_l=50,lmax_transition=100,nside=256,lmax=767,weighting='ivar'):
     lmin_low_ells = np.arange(0,lmax_transition,delta_b)
     lmax_low_ells = lmin_low_ells + delta_b
     lmin_low_ells[0]=2
     lmin_high_ells = np.arange(lmax_transition,lmax-delta_b_high_l,delta_b_high_l)
     lmax_high_ells = lmin_high_ells+delta_b_high_l
     lmax_high_ells[-1]=lmax
-    
+    if delta_b==2:
+        # removes first 2 multipoles
+        lmin_low_ells = lmin_low_ells[1:]
+        lmax_low_ells = lmax_low_ells[1:]
     lmins = np.append(lmin_low_ells,lmin_high_ells)
     lmaxs = np.append(lmax_low_ells,lmax_high_ells)
     
-    binning = define_binning(lmins,lmaxs,delta_b=delta_b,nside=nside,weighting='ivar')
+    binning = define_binning(lmins,lmaxs,delta_b=delta_b,nside=nside,weighting=weighting)
     return binning
 
 
@@ -79,7 +82,7 @@ def compute_master(f_a, f_b, wsp):
     return cl_decoupled
 
 
-def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None):
+def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False):
     
     nside = hp.npix2nside(len(klr))
     klm = hp.map2alm(klr,iter=1,pol=False)
@@ -91,10 +94,10 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
     w = nmt.NmtWorkspace()
     w.compute_coupling_matrix(f0, f0, binning)    
 
-    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam)
-    f11 = nmt.NmtField(apodized_mask, [c1],beam=beam)
-    f12 = nmt.NmtField(apodized_mask, [c2],beam=beam)
-    fjk = nmt.NmtField(apodized_mask, [jk],beam=beam)
+    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam,templates=gsyst)
+    f11 = nmt.NmtField(apodized_mask, [c1],beam=beam,templates=gsyst)
+    f12 = nmt.NmtField(apodized_mask, [c2],beam=beam,templates=gsyst)
+    fjk = nmt.NmtField(apodized_mask, [jk],beam=beam,templates=gsyst)
     
     clkg = compute_master(f0, f1, w)[0]
     clgg = compute_master(f1, f1, w)[0]
@@ -111,7 +114,10 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
     clkgjk = compute_master(f0, fjk, w)[0]
     clgjk = compute_master(fjk, fjk, w)[0]
     if ((cls_gg_th is None) and (cls_kg_th is None)):
-        return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk
+        if return_mode_coupling:
+            return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk,w
+        else:
+            return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk
     else:
         cl_gg_th_binned = w.decouple_cell(w.couple_cell([cls_gg_th]))[0]
         cl_kg_th_binned = w.decouple_cell(w.couple_cell([cls_kg_th]))[0]
@@ -130,16 +136,16 @@ def overdensity_from_counts(m,footprint,verbose=False):
     return c
 
 def get_magellanic_cloud_mask(nside,r_mclouds=[4,2]):
-	# Magellanic Cloud mask
-	# Give in input nside and radius for masking in degrees
-	mclouds = [(280.4652,-32.8884),(302.8084,-44.3277)] #Large MC and Small MC coordinates
-	#r_mclouds = [4,2] #deg
-	#r_mclouds = [5,2] #deg
-	mclouds_mask = np.ones(hp.nside2npix(nside))
-	for i,lmc in enumerate(mclouds):
-    		mcpix = hp.query_disc(nside,hp.ang2vec(lmc[0],lmc[1],lonlat=True),np.deg2rad(r_mclouds[i]))
-    		mclouds_mask[mcpix]=0.
-	return mclouds_mask
+    # Magellanic Cloud mask
+    # Give in input nside and radius for masking in degrees
+    mclouds = [(280.4652,-32.8884),(302.8084,-44.3277)] #Large MC and Small MC coordinates
+    #r_mclouds = [4,2] #deg
+    #r_mclouds = [5,2] #deg
+    mclouds_mask = np.ones(hp.nside2npix(nside))
+    for i,lmc in enumerate(mclouds):
+        mcpix = hp.query_disc(nside,hp.ang2vec(lmc[0],lmc[1],lonlat=True),np.deg2rad(r_mclouds[i]))
+        mclouds_mask[mcpix]=0.
+    return mclouds_mask
 
 def extrapolpixwin(nside, Slmax, pixwin=True):
     '''
