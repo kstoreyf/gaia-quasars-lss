@@ -82,7 +82,7 @@ def compute_master(f_a, f_b, wsp):
     return cl_decoupled
 
 
-def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False):
+def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False,w=None):
     
     nside = hp.npix2nside(len(klr))
     klm = hp.map2alm(klr,iter=1,pol=False)
@@ -90,9 +90,9 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
     beam = hp.pixwin(nside,lmax=lmax,pol=False)
     
     f0 = nmt.NmtField(apodized_mask, [klr],beam=beam) # corrects for pixel window as klr computed from downgrade
-
-    w = nmt.NmtWorkspace()
-    w.compute_coupling_matrix(f0, f0, binning)    
+    if w is None:
+        w = nmt.NmtWorkspace()
+        w.compute_coupling_matrix(f0, f0, binning)    
 
     f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam,templates=gsyst)
     f11 = nmt.NmtField(apodized_mask, [c1],beam=beam,templates=gsyst)

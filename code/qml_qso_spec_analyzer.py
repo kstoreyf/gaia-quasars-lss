@@ -108,6 +108,7 @@ def main(args):
 
     g_maps = args.catalog.split(',')#['G20.0']#,'G20.5'] 
     noise_models=args.noise_type.split(',')# ['diagk_diagg']
+    print(noise_models)
     
     mask_file = '%s/mask_%s_GalPlane_ns16_R2.00_ring_fsky%s.fits'%(args.mask_path,mask_type,"%d")
 
@@ -157,7 +158,8 @@ def main(args):
     
     lb = bins.lbin
     lb_nmt = bins_nmt.get_effective_ells()
-
+    
+    
     pixwin = False
     if pixwin:
         fpixw = extrapolpixwin(nside, lmax, pixwin=pixwin)
@@ -309,7 +311,7 @@ def main(args):
                     #data_nmt = {'data':{},'sims':{}}
                     data_nmt={}
                     for k in noise_models:
-                        data_nmt ={k:{'data':{},'sims':{}}}
+                        data_nmt[k]={'data':{},'sims':{}}
                         for key_nmt in keys_nmt:
                             data_nmt[k]['sims'][key_nmt]=[]
                 ###########################
@@ -428,8 +430,16 @@ def main(args):
                     cl_g1_sel=np.zeros_like(cl_kk)
                     cl_g2_sel=np.zeros_like(cl_kk)
 
-                    clkg_nmt,clgg_nmt,clkk_nmt,clkg1_nmt,clg1g1_nmt,clkg2_nmt,clg2g2_nmt,clg1g2_nmt,clkgjk_nmt,clgjk_nmt = compute_master_crosscorr_mask(k_nmt,data_in_mask[0],data_in_mask[1],
-                                                                                data_in_mask[2],data_in_mask[3],apodized_mask=apomask_hr*weight_hr,binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst)
+                    clkg_nmt,clgg_nmt,clkk_nmt,clkg1_nmt,clg1g1_nmt,clkg2_nmt,clg2g2_nmt,clg1g2_nmt,clkgjk_nmt,clgjk_nmt,w = compute_master_crosscorr_mask(k_nmt,data_in_mask[0],data_in_mask[1],
+                                                                                data_in_mask[2],data_in_mask[3],apodized_mask=apomask_hr*weight_hr,binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst,return_mode_coupling=True,w=None)
+                    #wins = w.get_bandpower_windows()
+                    #print(wins.squeeze().shape)
+                    #pl.plot(wins.squeeze()[0])
+                    #pl.plot(wins.squeeze()[1])
+                    #pl.plot(wins.squeeze()[10])
+                    #pl.show()
+                    #dada
+
                     clkgjk_nmt=0.
                     clgjk_nmt=0.
                     clg1g2_nmt=0.
@@ -458,7 +468,7 @@ def main(args):
                         cl_g1_sel += (gXg_est.get_spectra(g_map1_sel_run,g_map1_sel_run)[0]/nreal_galsplits)
                         cl_g2_sel += (gXg_est.get_spectra(g_map2_sel_run,g_map2_sel_run)[0]/nreal_galsplits)
 
-                        cls_data_nmt = compute_master_crosscorr_mask(k_nmt,data_in_mask[0],data_in_mask[1],data_in_mask[2],data_in_mask[3],apodized_mask=apomask_hr*weight_hr,binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst)
+                        cls_data_nmt = compute_master_crosscorr_mask(k_nmt,data_in_mask[0],data_in_mask[1],data_in_mask[2],data_in_mask[3],apodized_mask=apomask_hr*weight_hr,binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst,w=w)
 
                         clg1g1_nmt+=cls_data_nmt[4]/nreal_galsplits
                         clg2g2_nmt+=cls_data_nmt[6]/nreal_galsplits
@@ -553,24 +563,24 @@ def main(args):
                             jkselrnd_mc = hp.ud_grade(mcsel_in_mask[3],nside_out=nside)[mask] + gm
 
                             cls_sims_nmt = compute_master_crosscorr_mask(km_hr,mcsel_in_mask[0]+g_hr,mcsel_in_mask[1]+g_hr,mcsel_in_mask[2]+g_hr,mcsel_in_mask[3]+g_hr,apodized_mask=apomask_hr,
-                                                                         binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst)
+                                                                         binning=bins_nmt,lmax=lmax_hr,gsyst=nmt_syst,w=w)
 
-                            data_nmt['sims'][(kmap_dic_key,kmap_dic_key)].append(cls_sims_nmt[2])
-                            data_nmt['sims'][('g_sel','g_sel')].append(cls_sims_nmt[1])
+                            data_nmt[noise]['sims'][(kmap_dic_key,kmap_dic_key)].append(cls_sims_nmt[2])
+                            data_nmt[noise]['sims'][('g_sel','g_sel')].append(cls_sims_nmt[1])
 
-                            data_nmt['sims'][(kmap_dic_key,'g_sel')].append(cls_sims_nmt[0])
-                            data_nmt['sims'][('g1_sel','g1_sel')].append(cls_sims_nmt[4])
-                            data_nmt['sims'][('g2_sel','g2_sel')].append(cls_sims_nmt[6])
-                            data_nmt['sims'][('g1_sel','g2_sel')].append(cls_sims_nmt[7])
+                            data_nmt[noise]['sims'][(kmap_dic_key,'g_sel')].append(cls_sims_nmt[0])
+                            data_nmt[noise]['sims'][('g1_sel','g1_sel')].append(cls_sims_nmt[4])
+                            data_nmt[noise]['sims'][('g2_sel','g2_sel')].append(cls_sims_nmt[6])
+                            data_nmt[noise]['sims'][('g1_sel','g2_sel')].append(cls_sims_nmt[7])
 
-                            data_nmt['sims'][(kmap_dic_key,'gjk_sel')].append(cls_sims_nmt[8])
-                            data_nmt['sims'][('gjk_sel','gjk_sel')].append(cls_sims_nmt[9])
+                            data_nmt[noise]['sims'][(kmap_dic_key,'gjk_sel')].append(cls_sims_nmt[8])
+                            data_nmt[noise]['sims'][('gjk_sel','gjk_sel')].append(cls_sims_nmt[9])
 
                             # cross-correlation  for MC correction 
                             cls_sims_nmt = compute_master_crosscorr_mask(km_hr,kmc_signal_hr[n],mcsel_in_mask[1]+g_hr,mcsel_in_mask[2]+g_hr,mcsel_in_mask[3]+g_hr,apodized_mask=apomask_hr,binning=bins_nmt,lmax=lmax_hr)
 
-                            data_nmt['sims'][(kmap_dic_key,'k_in')].append(cls_sims_nmt[0])
-                            data_nmt['sims'][('k_in','k_in')].append(cls_sims_nmt[1])
+                            data_nmt[noise]['sims'][(kmap_dic_key,'k_in')].append(cls_sims_nmt[0])
+                            data_nmt[noise]['sims'][('k_in','k_in')].append(cls_sims_nmt[1])
 
                             # compute sims k
                             allclk.append(k_est.get_spectra(km)[0])
@@ -644,7 +654,12 @@ def main(args):
                     data_nmt[noise]['data'][(kmap_dic_key,'gjk_sel')]=clkgjk_nmt
                     data_nmt[noise]['data'][('gjk_sel','gjk_sel')]=clgjk_nmt
                     data_nmt['lb'] = lb_nmt
-
+                
+                #data_nmt['binning'] = bins_nmt
+                data_nmt['bpwf'] = wins = w.get_bandpower_windows().squeeze()
+                w.write_to('mll_'+args.out_file.replace('.pkl','.fits'))
+                #data_pkl['binning'] = bins
+                
                 all_data_pkl={}
                 all_data_pkl['qml'] = data_pkl
                 all_data_pkl['nmt'] = data_nmt
