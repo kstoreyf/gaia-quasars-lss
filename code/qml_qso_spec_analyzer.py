@@ -20,7 +20,7 @@ from xqml.libcov import compute_ds_dcb
 
 import pylab as pl 
 
-def get_custom_binning():
+def get_binning_custom():
     lmins = np.arange(2,40,2)
     lmins = np.append(lmins,np.arange(40,60,5))
     lmins = np.append(lmins,np.arange(60,767,30))
@@ -32,7 +32,7 @@ def get_custom_binning():
     return lmins,lmaxs
 
 
-def get_desi_binning():
+def get_binning_desi():
     lmins = np.arange(2,20,2)
     lmins = np.append(lmins,np.arange(20,100,5))
     lmins = np.append(lmins,np.arange(100,767,20))
@@ -74,8 +74,11 @@ def main(args):
     l_ffp10, b_ffp10, v_ffp10 = aberration_lbv_ffp10
     vlm_ffp10 = np.array([0., np.cos(b_ffp10), - np.exp(-1j * l_ffp10) * np.sin(b_ffp10) / np.sqrt(2.)])
     vlm_ffp10 *= (-v_ffp10 * np.sqrt(4 * np.pi / 3))
-    v_ffp10  = hp.alm2map(vlm_ffp10,nside,pixwin=True,lmax=1)*0
-    v_ffp10_hr  = hp.alm2map(vlm_ffp10,nside_hr,pixwin=True,lmax=1)*0
+    v_ffp10  = hp.alm2map(vlm_ffp10,nside,pixwin=True,lmax=1)
+    v_ffp10_hr  = hp.alm2map(vlm_ffp10,nside_hr,pixwin=True,lmax=1)
+    if args.nodipole_mocks:
+        v_ffp10 *= 0.
+        v_ffp10_hr *= 0.
 
     # systematics maps
     if args.systematics:
@@ -92,24 +95,19 @@ def main(args):
             syst.append(rot.rotate_map_pixel(np.load('%s/map_stars_NSIDE64.npy'%args.catalog_path)))
         if 'star_wise' in args.systematics:   
             syst.append(rot.rotate_map_pixel(hp.read_map('%s/allwise_total_rot_1024.fits'%args.catalog_path)))            
-        
+    
         if not len(syst):
-            raise ValueError("Systematics list not including valuable templates: %s"%args.systematics)
-        
-        #hp.mollview(syst[-1])
-        #pl.show()
-        #dasdas
-        
+            raise ValueError("Systematics list not including valuable templates: %s"%args.systematics) 
         syst_lr = [hp.ud_grade(s,nside_out=nside) for s in syst]
         syst_hr = [hp.ud_grade(s,nside_out=nside_hr) for s in syst]
+
     else:
         syst=[]
         do_g_syst=False
 
-    g_maps = args.catalog.split(',')#['G20.0']#,'G20.5'] 
-    noise_models=args.noise_type.split(',')# ['diagk_diagg']
-    print(noise_models)
-    
+    g_maps = args.catalog.split(',')
+    noise_models=args.noise_type.split(',')
+
     mask_file = '%s/mask_%s_GalPlane_ns16_R2.00_ring_fsky%s.fits'%(args.mask_path,mask_type,"%d")
 
     lens_mask_hr = hp.read_map('%s/planck_lensmask.fits'%args.mask_path)
@@ -139,11 +137,11 @@ def main(args):
     np.random.shuffle(split_reshuffle_rnd)
 
     if args.binning == 'custom':
-        lmins,lmaxs = get_custom_binning()
+        lmins,lmaxs = get_binning_custom()
         bins_nmt= nmt.NmtBin.from_edges(lmins, lmaxs, is_Dell=False)
         bins = xqml.Bins(lmins[lmaxs<lmax],lmaxs[lmaxs<lmax])                
     elif args.binning == 'desi':
-        lmins,lmax = get_desi_binning()
+        lmins,lmax = get_binning_desi()
         bins_nmt= nmt.NmtBin.from_edges(lmins, lmaxs, is_Dell=False)
         bins = xqml.Bins(lmins[lmaxs<lmax],lmaxs[lmaxs<lmax])        
     else:
@@ -158,7 +156,7 @@ def main(args):
     
     lb = bins.lbin
     lb_nmt = bins_nmt.get_effective_ells()
-    
+
     
     pixwin = False
     if pixwin:
@@ -175,7 +173,7 @@ def main(args):
 
     ##############################
     #Prepare lensing data
-    print("Read k mc nside",nside)
+    print("Read k maps")
     #klr=prepare_k_data(nside,'/Users/gfabbian/Work/PR4_variations/PR42018like_klm_dat_p.fits',pixwin=None,overwrite=True)
     klr=prepare_k_data(nside,'%s/%s_klm_dat_p.fits'%(args.lensing_path,args.lensing_map,),pixwin=1,overwrite=True,remove_dipole=args.nodipole_mocks)  # extrapolated pixelwindow
     k_nmt=prepare_k_data(nside_hr,'%s/%s_klm_dat_p.fits'%(args.lensing_path,args.lensing_map,),pixwin=1,overwrite=True,remove_dipole=args.nodipole_mocks)  # extrapolated pixelwindow
@@ -184,7 +182,8 @@ def main(args):
         dipole_suffix = '_nodip'
     else:
         dipole_suffix = ''
-
+    
+    print("Read k mc nside",nside,nside_hr)
     with open("%s/sims/%s_k_sims_nside%d%s.pkl"%(args.lensing_path,args.lensing_map,nside,dipole_suffix),"rb") as f:
         kmc = pkl.load(f)
     with open("%s/sims/%s_k_sims_nside%d%s.pkl"%(args.lensing_path,args.lensing_map,nside_hr,dipole_suffix),"rb") as f:
@@ -211,6 +210,7 @@ def main(args):
     #input model
     with open(args.cl_theory,"rb") as f:
         clth = pkl.load(f)
+    
     lth = np.arange(len(clth['PxP']))
     clkk = clth['PxP']*(lth*(lth+1)/2)**2
     clgg = clth['W1xW1']
@@ -232,11 +232,11 @@ def main(args):
     g_real=np.zeros(hp.nside2npix(nside))
 
     for remove_dipole_monopole in [args.marginalize_dipole]:#,False]:
-        print(remove_dipole_monopole)
+        #print("Maginalize dipole",remove_dipole_monopole)
         for j,g_map_name in enumerate(g_maps):
 
             # Prepare raw GAIA data
-            print("Read catalog and convert coordinate")
+            print("Read catalog %s and convert coordinate"%g_map_name)
             d=fits.open('%s/catalog_%s.fits'%(args.catalog_path,g_map_name))
             nqso = len(d[1].data['redshift_spz'])
             print ("N_QSO in catalog",nqso)
@@ -259,12 +259,12 @@ def main(args):
                 else:
                     gmask_lr = selfunc > mask_name/100.
                     gmask_hr = selfunc_hr > mask_name/100.
-                
+                print("fsky mask %s"%(args.mask),np.mean(gmask_lr),np.mean(gmask_hr))
                 mask_hr = gmask_hr * source_mask_hr
                 mask = gmask_lr & source_mask.astype(bool)                
                 apomask_hr = nmt.mask_apodization(mask_hr,1., apotype="C2")
-
                 npix = int(np.sum(mask))
+                print("fsky total mask",np.mean(mask),np.mean(mask_hr))
 
                 data_in_mask = process_catalog_and_splits(l,b,selfunc_hr,nside=nside_hr,nbar_confidence_mask=mask_hr.astype(bool))
 
@@ -279,9 +279,12 @@ def main(args):
                 msel = hp.ud_grade(msel_hr,nside_out=nside,power=-2)
 
                 nbar_sel = np.mean(msel[mask])
-                nbar = nbar_sel
-
-                print(np.mean(msel_hr[mask_hr>0]),np.mean(msel[mask]),np.mean(msel_lr[mask>0]),hp.nside2pixarea(nside)/nbar_sel)
+                nbar_hr = np.mean(msel_hr[mask_hr>0])
+                nbar_lr = np.mean(msel_lr[mask>0])
+                assert np.sum(msel_hr) == np.sum(msel)
+                print("nbar hr",nbar_hr,"nbar lr (HR degraded)",nbar_sel,"nbar lr",nbar_lr)
+                print("Shot noise lr",hp.nside2pixarea(nside)/nbar_sel)
+                print("Shot noise hr",hp.nside2pixarea(nside_hr)/nbar_hr)
 
                 gmap_dic_key = g_map_name
 
@@ -289,7 +292,7 @@ def main(args):
                 npix = np.sum(mask)
 
                 #out_fname = '/Users/gfabbian/Work/quasar_gaia/output/cls_kXQSO_%s_planck%d_remove_dipole_%s_knlgcovselfunc_dl20.pkl'%(g_map_name.replace('.','p'),mask_name,str(remove_dipole_monopole))
-                out_fname = '/Users/gfabbian/Work/quasar_gaia/output/PR4_%s_60_nogpixwin_gdipole_dl%d_nmt_alldip10k_nokdip.pkl'%(str(remove_dipole_monopole),dell)
+                #out_fname = '/Users/gfabbian/Work/quasar_gaia/output/PR4_%s_60_nogpixwin_gdipole_dl%d_nmt_alldip10k_nokdip.pkl'%(str(remove_dipole_monopole),dell)
                 out_fname = args.out_file
 
                 if False:#os.path.exists(out_fname):
@@ -446,7 +449,7 @@ def main(args):
                     clg1g1_nmt=0.
                     clg2g2_nmt=0.
 
-                    print("Computing noise debiased g spectra")
+                    print("Computing noise debiased g spectra on %d splits",nreal_galsplits)
                     for n in range(nreal_galsplits):
                         if args.verbose:
                             progress_bar(n, nreal_galsplits)
@@ -475,7 +478,6 @@ def main(args):
                         clg1g2_nmt+=cls_data_nmt[-3]/nreal_galsplits
                         clkgjk_nmt+=cls_data_nmt[-2]/nreal_galsplits
                         clgjk_nmt+= cls_data_nmt[-1]/nreal_galsplits
-
                     print("done")
 
                     # ############## Construct MC ###############
@@ -510,7 +512,7 @@ def main(args):
                         km = np.zeros((1,npix))
                         km_signal = np.zeros((1,npix))
 
-
+                        print("Processing %d simulations",nsims)
                         for n in range(nsims):
                             if args.verbose:
                                 progress_bar(n, nsims)
@@ -693,5 +695,4 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose',dest='verbose',action='store_true')
 
     args = parser.parse_args()
-    print(args.noise_type)
     main(args)
