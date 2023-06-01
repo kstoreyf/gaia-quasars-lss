@@ -254,18 +254,19 @@ def main(args):
             for mask_name in masks:          
                 np.random.seed(123456)
                 if 'planck' in mask_file:
-                    gmask_lr = hp.read_map(mask_file%mask_name).astype(bool)
-                    gmask_hr = hp.read_map(mask_file_hr%mask_name)
+                    # added safety check
+                    gmask_lr = hp.read_map(mask_file%mask_name).astype(bool) & (selfunc_hr>0.5)
+                    gmask_hr = hp.read_map(mask_file_hr%mask_name) & (selfunc>0.5)
                 else:
                     gmask_lr = selfunc > mask_name/100.
                     gmask_hr = selfunc_hr > mask_name/100.
                 print("fsky mask %s"%(args.mask),np.mean(gmask_lr),np.mean(gmask_hr))
-                mask_hr = gmask_hr * source_mask_hr
+                mask_hr = gmask_hr * source_mask_hr 
                 mask = gmask_lr & source_mask.astype(bool)                
                 apomask_hr = nmt.mask_apodization(mask_hr,1., apotype="C2")
                 npix = int(np.sum(mask))
                 print("fsky total mask",np.mean(mask),np.mean(mask_hr))
-
+                
                 data_in_mask = process_catalog_and_splits(l,b,selfunc_hr,nside=nside_hr,nbar_confidence_mask=mask_hr.astype(bool))
 
                 g_map_sel = hp.ud_grade(data_in_mask[0],nside_out=nside)
