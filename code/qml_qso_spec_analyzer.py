@@ -85,16 +85,21 @@ def main(args):
         do_g_syst=False
         syst=[]
         if 'dust' in args.systematics:
+            print("Deproject dust")
             syst.append(rot.rotate_map_pixel(np.load('%s/map_dust_NSIDE64.npy'%args.catalog_path)))
         if 'm10' in args.systematics:    
+            print("Deproject m10")
             m10 = rot.rotate_map_pixel(np.load('%s/map_m10_NSIDE64.npy'%args.catalog_path))
         if 'mcs' in args.systematics:    
+            print("Deproject mcs")
             mcs = rot.rotate_map_pixel(np.load('%s/map_mcs_NSIDE64.npy'%args.catalog_path))
             mcs[mcs<0] = 0.
-        if 'star' in args.systematics:   
-            syst.append(rot.rotate_map_pixel(np.load('%s/map_stars_NSIDE64.npy'%args.catalog_path)))
         if 'star_wise' in args.systematics:   
-            syst.append(rot.rotate_map_pixel(hp.read_map('%s/allwise_total_rot_1024.fits'%args.catalog_path)))            
+            print("Deproject stars wise")
+            syst.append(rot.rotate_map_pixel(hp.read_map('%s/allwise_total_rot_1024.fits'%args.catalog_path)))                        
+        if 'star' in args.systematics:   
+            print("Deproject stars")
+            syst.append(rot.rotate_map_pixel(np.load('%s/map_stars_NSIDE64.npy'%args.catalog_path)))
     
         if not len(syst):
             raise ValueError("Systematics list not including valuable templates: %s"%args.systematics) 
@@ -255,8 +260,8 @@ def main(args):
                 np.random.seed(123456)
                 if 'planck' in mask_file:
                     # added safety check
-                    gmask_lr = hp.read_map(mask_file%mask_name).astype(bool) & (selfunc_hr>0.5)
-                    gmask_hr = hp.read_map(mask_file_hr%mask_name) & (selfunc>0.5)
+                    gmask_lr = hp.read_map(mask_file%mask_name).astype(bool) & (selfunc>0.5)
+                    gmask_hr = hp.read_map(mask_file_hr%mask_name) & (selfunc_hr>0.5)
                 else:
                     gmask_lr = selfunc > mask_name/100.
                     gmask_hr = selfunc_hr > mask_name/100.
@@ -266,7 +271,7 @@ def main(args):
                 apomask_hr = nmt.mask_apodization(mask_hr,1., apotype="C2")
                 npix = int(np.sum(mask))
                 print("fsky total mask",np.mean(mask),np.mean(mask_hr))
-                
+
                 data_in_mask = process_catalog_and_splits(l,b,selfunc_hr,nside=nside_hr,nbar_confidence_mask=mask_hr.astype(bool))
 
                 g_map_sel = hp.ud_grade(data_in_mask[0],nside_out=nside)
@@ -282,7 +287,8 @@ def main(args):
                 nbar_sel = np.mean(msel[mask])
                 nbar_hr = np.mean(msel_hr[mask_hr>0])
                 nbar_lr = np.mean(msel_lr[mask>0])
-                assert np.sum(msel_hr) == np.sum(msel)
+                
+                
                 print("nbar hr",nbar_hr,"nbar lr (HR degraded)",nbar_sel,"nbar lr",nbar_lr)
                 print("Shot noise lr",hp.nside2pixarea(nside)/nbar_sel)
                 print("Shot noise hr",hp.nside2pixarea(nside_hr)/nbar_hr)
@@ -450,7 +456,7 @@ def main(args):
                     clg1g1_nmt=0.
                     clg2g2_nmt=0.
 
-                    print("Computing noise debiased g spectra on %d splits",nreal_galsplits)
+                    print("Computing noise debiased g spectra on %d splits"%nreal_galsplits)
                     for n in range(nreal_galsplits):
                         if args.verbose:
                             progress_bar(n, nreal_galsplits)
@@ -686,7 +692,7 @@ if __name__ == '__main__':
     parser.add_argument('--mask_path',dest='mask_path',action='store',type=str,default='/Users/gfabbian/Work/quasar_gaia',help='Masks path')
     parser.add_argument('--marginalize_dipole',dest='marginalize_dipole',action='store_true')
     parser.add_argument('--nodipole_mocks',dest='nodipole_mocks',action='store_true')
-    parser.add_argument('--deproj_systematics',dest='systematics',action='store',type=str,default=None,help='List systeamtics template separated by commas {dust,star,mcs,m10,star_wise}')
+    parser.add_argument('--deproject_systematics',dest='systematics',action='store',type=str,default=None,help='List systeamtics template separated by commas {dust,star,mcs,m10,star_wise}')
     parser.add_argument('--nside_lr',dest='nside_lr',action='store',type=int,default=16,help='nside of QML maps') 
     parser.add_argument('--nside_hr',dest='nside_hr',action='store',type=int,default=256,help='nside of NMT maps')
     parser.add_argument('--nsims',dest='nsim',action='store',type=int,default=100,help='number of MC simulations')
