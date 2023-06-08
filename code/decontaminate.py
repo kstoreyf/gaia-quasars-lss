@@ -17,13 +17,14 @@ def main():
     overwrite_conf_mats = False
     fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
     fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
+    tag_qspec = '_eboss'
     proper_motion_cut = True
 
     s = time.time()
     #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
     overwrite_table = True
     apply_to_gaia_quasar_catalog(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
-    apply_to_sdss_quasars(overwrite=overwrite_table)
+    apply_to_sdss_quasars(tag_qspec=tag_qspec, overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
@@ -75,10 +76,10 @@ def apply_to_gaia_quasar_catalog(fn_cuts, overwrite=False, proper_motion_cut=Tru
 
 def apply_to_sdss_quasars(overwrite=False, proper_motion_cut=True):
 
-    fn_sdss_clean = '../data/quasars_sdss_clean.fits'
+    fn_sdss_clean = '../data/quasars{tag_qspec}_clean.fits'
 
     print("Load in data")
-    fn_sdss = '../data/quasars_sdss_xgaia_xunwise_good_nodup.fits'
+    fn_sdss = '../data/quasars{tag_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits'
     tab_sdss = utils.load_table(fn_sdss)
 
     fn_gaia_clean = '../data/gaia_candidates_clean.fits'

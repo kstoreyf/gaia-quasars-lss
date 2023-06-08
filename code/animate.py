@@ -21,52 +21,51 @@ def main():
     #fn_data = '../data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
-    G_max = 20.0
-    data_tag = f'gaiaQ_G{G_max}'
+    G_max = 20.5
+    #data_tag = f'gcathi'
+    data_tag = 'sdss'
 
-    plot_dir = '../plots/2023-03-29_figures'
-    fn_save_init = f'{plot_dir}/gcatlo_3d.png'
-    #data_tag = 'sdss'
+    plot_dir = '../plots/2023-04-04_figures'
+    anim_dir = '../plots/2023-05-27_animations'
 
-    if 'gaia' in data_tag:
-        fn_data = f'../data/gaiaQ_G{G_max}.fits'
-        title = 'Gaia QSO catalog ($G<20.4$)'
-        colorbar_label = r'redshift $z$ (spectrophotometric)'
+    if 'gcat' in data_tag:
+        fn_data = f'../data/QUaia_G{G_max}.fits'
+        #title = f'QUaia ($G<{G_max}$)'
+        title = None
+        colorbar_label = r'redshift $z$'
         redshift_name = 'redshift_spz'
         property_colorby = redshift_name
         ra_name, dec_name = 'ra', 'dec'
-        clean_sdss = False
     elif 'sdss' in data_tag:
-        fn_data = f'../data/sdss_slim.fits'
-        title = 'SDSS DR16 QSOs'
-        colorbar_label = r'redshift $z$ (spectroscopic)'
-        redshift_name = 'Z'
+        fn_data = f'../data/quasars_sdss_xgaiaall_xunwiseall_good.fits'
+        title = None
+        #title = 'SDSS DR16Q'
+        colorbar_label = r'redshift $z$'
+        redshift_name = 'z_sdss'
         property_colorby = redshift_name
-        ra_name, dec_name = 'RA', 'DEC'
-        clean_sdss = True
+        ra_name, dec_name = 'ra_sdss', 'dec_sdss'
 
     #format_save = 'gif'
     format_save = 'mp4'
     #N_sub_str = '1e3'
-    #N_sub_str = '1e3'
     N_sub_str = 'all'
-    fn_save = f'../plots/2022-11-02_animations/quasars_{data_tag}_N{N_sub_str}_{property_colorby}.{format_save}'
-    #redshift_name = 'redshift_photoz_est'
-    #redshift_name = 'redshift_qsoc'
+    
+    fn_save = f'{anim_dir}/{data_tag}_N{N_sub_str}_{property_colorby}.{format_save}'
+    fn_save_init = f'{plot_dir}/{data_tag}_N{N_sub_str}_{property_colorby}_3d.png'
 
-    s = 0.12
-    #s = 4
-    alpha = 0.09
+    if N_sub_str=='all':
+        alpha = 0.1
+        s = 0.11
+    else:
+        # to make visible for tests
+        alpha = 1
+        s = 4
     lim = 3000
     vmin, vmax = 0, 4.5
 
     print("Reading data:", fn_data)
     tab = Table.read(fn_data, format='fits')
     print("Loaded data with N =", len(tab))
-    if clean_sdss:
-        i_zwarning0 = tab['ZWARNING']==0
-        i_zgood = tab['Z'] > 0.01
-        tab = tab[i_zwarning0 & i_zgood]
 
     tab = prepare_data(tab, redshift_name, ra_name=ra_name, dec_name=dec_name, 
                         N_sub_str=N_sub_str)
@@ -78,9 +77,8 @@ def main():
     plot_init(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
                  cmap=scmap, colorbar_label=colorbar_label,
                  fn_save_init=fn_save_init)
-    print(stophere)
 
-    anim = make_anim(tab, property_colorby, s, alpha, lim, vmin, vmax,
+    anim = make_anim(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
                      cmap=scmap, title=title, colorbar_label=colorbar_label)
 
     print("Saving animation to", fn_save)
@@ -120,7 +118,7 @@ def prepare_data(tab, redshift_name, ra_name='ra', dec_name='dec',
 
 
 def plot_init(tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
-                  title='', colorbar_label=r'redshift $z$', colorbar=True,
+                  title=None, colorbar_label=r'redshift $z$', colorbar=True,
                   fn_save_init=None):
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(projection='3d')
@@ -133,7 +131,7 @@ def plot_init(tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
 
 
 def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
-                  title='', colorbar_label=r'redshift $z$', colorbar=True,
+                  title=None, colorbar_label=r'redshift $z$', colorbar=True,
                   fn_save_init=None):
     #fig = plt.figure(figsize=(10,10))
     #ax = fig.add_subplot(projection='3d')
@@ -147,7 +145,8 @@ def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
     ax.set_ylim(-lim, lim)
     ax.set_zlim(-lim, lim)
     ax.set_facecolor('white')
-    ax.set_title(title, y=1.03, fontsize=28)
+    if title is not None:
+        ax.set_title(title, y=1.03, fontsize=28)
 
     # colorbar
     if colorbar:
@@ -171,10 +170,11 @@ def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
 
 
 def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
-              title='', colorbar_label=r'redshift $z$', colorbar=True):
+              title=None, colorbar_label=r'redshift $z$', colorbar=True):
     # Create a figure and a 3D Axes
     fig = plt.figure(figsize=(10,10))
-    ax = Axes3D(fig)
+    ax = fig.add_subplot(projection='3d')
+    #ax = Axes3D(fig)
 
     def init():
         #fig = plt.figure(figsize=(10,10))
@@ -188,7 +188,8 @@ def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
         ax.set_zlim(-lim, lim)
         #ax.set_facecolor('black')
         ax.set_facecolor('white')
-        ax.set_title(title, y=1.03, fontsize=28)
+        if title is not None:
+            ax.set_title(title, y=1.03, fontsize=28)
 
         # colorbar
         if colorbar:

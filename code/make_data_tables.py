@@ -6,25 +6,55 @@ from astropy.table import Table, join, vstack
 
 import utils
 
+"""
+make_data_tables.py
+
+- To make superset:
+    - gaia_candidates_plus_info()
+        - in: gaia_candidates.fits.gz
+        - out: gaia_candidates_plus.fits
+    - gaia_candidates_superset()
+        - in: gaia_candidates_plus.fits, gaia_candidates_xunwise_all.csv
+        - out: gaia_candidates_superset.fits
+- To make labeled data for training / validation (<obj_type> = [quasars, stars, galaxies]):
+    - <obj_type>_sdss_xgaia_good()
+        - in: <obj_type>_sdss_xgaia_xunwise_all.csv
+        - out: <obj_type>_sdss_xgaia_xunwise_good.fits
+    - remove_duplicate_sources()
+        - in: <obj_type>_sdss_xgaia_xunwise_good.fits (all 3)
+        - out: <obj_type>_sdss_xgaia_xunwise_good_nodup.fits (all 3)
+    - make_labeled_table()
+        - in: <obj_type>_sdss_xgaia_xunwise_good_nodup.fits (all 3), gaia_candidates_superset.fits
+        - out: labeled_xsuperset.fits
+"""
 
 def main():
     overwrite = True
+
+    ### Make main datasets
     #gaia_candidates_plus_info(overwrite=overwrite)
     #gaia_candidates_superset(overwrite=overwrite)
     ###gaia_candidates_clean(overwrite=overwrite)
 
     #gaia_slim(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
+    #eboss_slim(overwrite=overwrite)
     #gaia_purer_sourceids(overwrite=overwrite)
 
+    ### Make quasar tables
     #quasars_sdss_xgaia_good(overwrite=overwrite)
     #quasars_sdss_xgaiaall_good(overwrite=overwrite)
+    #quasars_eboss_xgaia_good(overwrite=overwrite)
+    #quasars_eboss_xgaiaall_good(overwrite=overwrite)
+
+    ### Make other labeled tables
     # galaxies_sdss_xgaia_good(overwrite=overwrite)
     # stars_sdss_xgaia_good(overwrite=overwrite)
     #mcs_xgaia(overwrite=overwrite)
-    #remove_duplicate_sources(overwrite=overwrite)
 
-    #make_labeled_table(overwrite=overwrite)
+    ### Adjust and combine labeled data
+    #remove_duplicate_sources(overwrite=overwrite)
+    make_labeled_table(overwrite=overwrite)
     
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
@@ -42,9 +72,9 @@ def main():
 
     # make_public_catalog(G_max=20.6, overwrite=overwrite)
 
-    G_max = 20.5
-    n_zbins = 3
-    make_redshift_split_catalogs(G_max, n_zbins)
+    # G_max = 20.5
+    # n_zbins = 3
+    # make_redshift_split_catalogs(G_max, n_zbins)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -88,6 +118,39 @@ def sdss_slim(overwrite=False):
 
     tab_sdss.write(fn_sdss_slim, overwrite=overwrite)
     print(f"Wrote table with {len(tab_sdss)} objects to {fn_sdss_slim}")
+
+
+
+def eboss_slim(overwrite=False):
+    # save name
+    fn_eboss_slim = '../data/eboss_quasars_slim.fits'
+   
+    # data paths 
+    fn_eboss = '../data/eBOSS_QSO_full_ALLdata-vDR16_changecolname.fits'
+
+    # Load data
+    print("Loading data")
+    tab_eboss = utils.load_table(fn_eboss)
+
+    print(tab_eboss['Z'])
+
+    # Create and save
+    columns_to_keep = ['PLATE', 'MJD', 'FIBERID', 'ID', 'QSO_ID', 'RA', 'DEC', 'Z', 'ZWARNING', 
+                       'MODELMAG', 'IMATCH', 'COMP_BOSS', 'sector_SSR']
+    tab_eboss.keep_columns(columns_to_keep)
+
+    mag_names = ['u', 'g', 'r', 'i', 'z']
+    for i, mn in enumerate(mag_names):
+        tab_eboss[f'{mn}_mag_sdss'] = tab_eboss['MODELMAG'][:,i]
+
+    tab_eboss.remove_column('MODELMAG')
+    print(tab_eboss.columns)
+
+    print(tab_eboss['Z'])
+
+    tab_eboss.write(fn_eboss_slim, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_eboss)} objects to {fn_eboss_slim}")
+
 
 
 def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz_kNN_K27_std.fits',
@@ -240,29 +303,15 @@ def quasars_sdss_xgaia_good(overwrite=False):
     fn_sdss_xgaia = '../data/quasars_sdss_xgaia_xunwise_all.csv'
     tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
-    tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
-    tab_sdss_xgaia.rename_column('dec', 'dec_unwise')
-    for column_name in list(tab_sdss_xgaia.columns):
-        new_name = column_name
-        if column_name.startswith('t1'):
-            new_name = column_name.split('t1_')[-1]
-            if new_name=='z':
-                new_name = 'z_sdss'
-        tab_sdss_xgaia.rename_column(column_name, new_name)
+    update_column_names_sdss(tab_sdss_xgaia)
 
-    # Keep sources with phot_bp_n_obs and phot_rp_n_obs >= 5
-    i_good_nobs = (tab_sdss_xgaia['phot_bp_n_obs'] >= 5) & (tab_sdss_xgaia['phot_rp_n_obs'] >= 5)
-    print(f"Removing {np.sum(~i_good_nobs)} sources with <5 bp or rp n_obs")
+    # This cut also serves to keep only sources with Gaia data!! 
+    # Keep sources with sufficient phot_bp_n_obs and phot_rp_n_obs
+    i_good_nobs = cuts_good_nobs(tab_sdss_xgaia)
     tab_sdss_xgaia = tab_sdss_xgaia[i_good_nobs]
 
-    # Clean out super low redshift SDSS objects, and ones with bad redshifts
-    z_min = 0.01 #magic #hyperparameter
-    redshift_key = 'z_sdss'
-    idx_zgood = utils.redshift_cut_index(tab_sdss_xgaia, z_min, redshift_key)
-    print(f"Removing {np.sum(~idx_zgood)} sources with z<{z_min}")
-    tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
-    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
-    # Note that we already did zwarning cut in Gaia cross-match, so don't need to here (didn't save zwarning)
+    i_cuts_sdss = cuts_quasars_sdss(tab_sdss_xgaia)
+    tab_sdss_xgaia = tab_sdss_xgaia[i_cuts_sdss]
 
     tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
@@ -276,39 +325,116 @@ def quasars_sdss_xgaiaall_good(overwrite=False):
     fn_sdss_xgaia = '../data/quasars_sdss_xgaiaall_sdssphot_xunwiseall.csv'
     tab_sdss_xgaia = utils.load_table(fn_sdss_xgaia, format='csv')
     print(f"Number of SDSS xGaia QSOs: {len(tab_sdss_xgaia)}")
-    tab_sdss_xgaia.rename_column('ra', 'ra_unwise')
-    tab_sdss_xgaia.rename_column('dec', 'dec_unwise')
-    for column_name in list(tab_sdss_xgaia.columns):
-        new_name = column_name
-        if column_name.startswith('t1'):
-            new_name = column_name.split('t1_')[-1]
-            if new_name=='z':
-                new_name = 'z_sdss'
-        tab_sdss_xgaia.rename_column(column_name, new_name)
 
-    # Clean out super low redshift SDSS objects, and ones with bad redshifts
-    z_min = 0.01 #magic #hyperparameter
-    redshift_key = 'z_sdss'
-    idx_zgood = utils.redshift_cut_index(tab_sdss_xgaia, z_min, redshift_key)
-    print(f"Removing {np.sum(~idx_zgood)} sources with z<{z_min}")
-    tab_sdss_xgaia = tab_sdss_xgaia[idx_zgood]
-    print(f"Number of SDSS QSOs with good redshfits: {len(tab_sdss_xgaia)}")
-    # Note that we already did zwarning cut in Gaia cross-match, so don't need to here (didn't save zwarning)
+    update_column_names_sdss(tab_sdss_xgaia)
 
-    # get the SDSS photometry that we dropped in the initial gaia cross-match 
-    # fn_sdss_full = '../data/SDSS_DR16Q_v4.fits'
-    # tab_sdss_full = Table.read(fn_sdss_full, format='fits')
-    # tab_sdss_full.keep_columns(['OBJID', 'PSFMAG'])
-    # tab_sdss_full.rename_column('OBJID', 'objid')
-    # print(len(tab_sdss_xgaia))
-    # print(np.sum(np.isfinite(tab_sdss_xgaia['objid'])))
-    # tab_sdss_xgaia = join(tab_sdss_xgaia, tab_sdss_full, keys='objid', join_type='left')
-    # print(np.sum(tab_sdss_xgaia['PSFMAG']))
+    i_cuts_sdss = cuts_quasars_sdss(tab_sdss_xgaia)
+    tab_sdss_xgaia = tab_sdss_xgaia[i_cuts_sdss]
+
     print(tab_sdss_xgaia.columns)
 
     tab_sdss_xgaia.write(fn_sdss_xgaia_good, overwrite=overwrite)
     print(f"Wrote table with {len(tab_sdss_xgaia)} objects to {fn_sdss_xgaia_good}")
 
+
+def quasars_eboss_xgaia_good(overwrite=False):
+
+    fn_eboss_xgaia_good = '../data/quasars_eboss_xgaia_xunwise_good.fits'
+
+    print("Load in eBOSS xgaia data")
+    fn_eboss_xgaia = '../data/quasars_eboss_xgaiaall_xunwiseall.csv'
+    tab_eboss_xgaia = utils.load_table(fn_eboss_xgaia, format='csv')
+    print(f"Number of eBOSS xGaia QSOs: {len(tab_eboss_xgaia)}")
+
+    update_column_names_sdss(tab_eboss_xgaia)
+
+    # Keep sources with sufficient phot_bp_n_obs and phot_rp_n_obs
+    i_good_nobs = cuts_good_nobs(tab_eboss_xgaia)
+    tab_eboss_xgaia = tab_eboss_xgaia[i_good_nobs]
+
+    # apply cuts
+    i_eboss_cuts = cuts_quasars_eboss(tab_eboss_xgaia)
+    tab_eboss_good = tab_eboss_xgaia[i_eboss_cuts]
+
+    tab_eboss_good.write(fn_eboss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_eboss_good)} objects to {fn_eboss_xgaia_good}")
+
+
+def quasars_eboss_xgaiaall_good(overwrite=False):
+
+    fn_eboss_xgaia_good = '../data/quasars_eboss_xgaiaall_xunwiseall_good.fits'
+
+    print("Load in eBOSS xgaia data")
+    fn_eboss_xgaia = '../data/quasars_eboss_xgaiaall_xunwiseall.csv'
+    tab_eboss_xgaia = utils.load_table(fn_eboss_xgaia, format='csv')
+    print(f"Number of eBOSS xGaia QSOs: {len(tab_eboss_xgaia)}")
+
+    update_column_names_sdss(tab_eboss_xgaia)
+
+    # apply cuts
+    i_eboss_cuts = cuts_quasars_eboss(tab_eboss_xgaia)
+    tab_eboss_good = tab_eboss_xgaia[i_eboss_cuts]
+
+    tab_eboss_good.write(fn_eboss_xgaia_good, overwrite=overwrite)
+    print(f"Wrote table with {len(tab_eboss_good)} objects to {fn_eboss_xgaia_good}")
+
+
+def cuts_good_nobs(tab):
+    i_good_nobs = (tab['phot_bp_n_obs'] >= 5) & (tab['phot_rp_n_obs'] >= 5)
+    print(f"N={np.sum(~i_good_nobs)} sources with <5 bp or rp n_obs")
+    return i_good_nobs
+
+
+def update_column_names_sdss(tab):
+    tab.rename_column('ra', 'ra_unwise')
+    tab.rename_column('dec', 'dec_unwise')
+    for column_name in list(tab.columns):
+        new_name = column_name
+        if column_name.startswith('t1'):
+            new_name = column_name.split('t1_')[-1]
+            # don't need this right now bc changed name in sql script,
+            # but keep in case
+            if new_name=='z':
+                new_name = 'z_sdss'
+        tab.rename_column(column_name, new_name)    
+
+
+def cuts_quasars_sdss(tab_sdss):
+    # NOTE that we already did zwarning cut in Gaia cross-match, 
+    # so don't need to here (didn't save zwarning)
+
+    
+    # Clean out super low redshift SDSS objects, and ones with bad redshifts
+    z_min = 0.01 #magic #hyperparameter
+    redshift_key = 'z_sdss'
+    i_zgood = utils.redshift_cut_index(tab_sdss, z_min, redshift_key)
+    print(f"{np.sum(~i_zgood)} sources with z<{z_min}")
+    return i_zgood
+
+
+def cuts_quasars_eboss(tab_eboss):
+    # Clean out super low redshift SDSS objects, and ones with bad redshifts
+    z_min = 0.01 #magic #hyperparameter
+    redshift_key = 'z_sdss'
+    i_zgood = utils.redshift_cut_index(tab_eboss, z_min, redshift_key)
+    print(f"{np.sum(~i_zgood)} sources with z<{z_min}")
+    
+    ### eBOSS data choices
+    # eBOSS and legacy quasars (as used in clustering sample)
+    i_imatch = (tab_eboss['imatch']==1) | (tab_eboss['imatch']==2)
+    print('N imatch:', np.sum(i_imatch))
+    # >0.5 sector completeness and redshift goodness (as used in clustering sample)
+    i_comp = (tab_eboss['comp_boss']>0.5)
+    i_sect = (tab_eboss['sector_ssr']>0.5)
+    print('N comp_boss:', np.sum(i_comp), 'N sector_ssr:', np.sum(i_sect))
+    print('N comp_boss & sector_ssr:', np.sum(i_comp & i_sect))
+    i_clust = i_imatch & i_comp & i_sect
+    print('N clust:', np.sum(i_clust))
+    # zwarning must == 0
+    i_zwarning0 = tab_eboss['zwarning']==0
+
+    i_eboss = i_clust & i_zgood & i_zwarning0
+    return i_eboss
 
 
 
@@ -417,7 +543,8 @@ def mcs_xgaia(overwrite=False):
 def remove_duplicate_sources(overwrite=False):
 
     print("Loading tables")
-    fn_quasars = '../data/quasars_sdss_xgaia_xunwise_good.fits'
+    tag_qspec = '_eboss'
+    fn_quasars = f'../data/quasars{tag_qspec}_xgaia_xunwise_good.fits'
     fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
     fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
     # don't need to include MCs here bc there is no overlap bw MCs and SDSS
@@ -445,7 +572,7 @@ def remove_duplicate_sources(overwrite=False):
         tabs[i] = tabs[i][~i_dup]
         print(f"New table size: {len(tabs[i])}")
 
-        fn_save = fns[i].split('.fits')[0] + '_nodup.fits'
+        fn_save = fns[i].split('.fits')[0] + f'_nodup{tag_qspec}.fits'
         print(f"Saving to {fn_save}")
         tabs[i].write(fn_save, overwrite=overwrite)        
 
@@ -453,21 +580,22 @@ def remove_duplicate_sources(overwrite=False):
 
 def make_labeled_table(overwrite=False):
 
+    tag_qspec = '_eboss'
     # save to:
-    fn_labeled = '../data/labeled_superset.fits'
+    fn_labeled = f'../data/labeled_superset{tag_qspec}.fits'
 
     # Requiring labeled data to be in set we will apply to, this wnec one:
     fn_gsup = '../data/gaia_candidates_superset.fits'
     tab_gsup = utils.load_table(fn_gsup)
 
     # Our labels come from SDSS
-    tab_squasars = utils.load_table(f'../data/quasars_sdss_xgaia_xunwise_good_nodup.fits')
+    tab_squasars = utils.load_table(f'../data/quasars{tag_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits')
     print(f"Number of SDSS quasars: {len(tab_squasars)}")
 
-    tab_sstars = utils.load_table(f'../data/stars_sdss_xgaia_xunwise_good_nodup.fits')
+    tab_sstars = utils.load_table(f'../data/stars_sdss_xgaia_xunwise_good_nodup{tag_qspec}.fits')
     print(f"Number of SDSS stars: {len(tab_sstars)}")
 
-    tab_sgals = utils.load_table(f'../data/galaxies_sdss_xgaia_xunwise_good_nodup.fits')
+    tab_sgals = utils.load_table(f'../data/galaxies_sdss_xgaia_xunwise_good_nodup{tag_qspec}.fits')
     print(f"Number of SDSS galaxies: {len(tab_sgals)}")
 
     tab_mcs = utils.load_table(f'../data/mcs_xgaia.fits')
