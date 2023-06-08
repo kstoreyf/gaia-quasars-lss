@@ -16,16 +16,21 @@ def main():
     map_names = ['dust', 'stars', 'm10', 'mcs']
     #map_names = ['dust', 'stars']
     NSIDE = 64
-    G_max = 20.5
-    #G_max = 20.0
+    #G_max = 20.5
+    G_max = 20.0
     fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
     fit_zeros = False
+    set_mean = True
+    tag_sel = ''
+    if set_mean:
+        tag_sel += 'setmean'
 
-    tag_cat = '_zsplit3bin2'
+    #tag_cat = '_zsplit3bin2'
+    tag_cat = '_qeboss'
     #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
-    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}.fits"
+    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
     overwrite = True
 
     start = time.time()
@@ -78,7 +83,7 @@ def main():
 
     print("Training fitter", flush=True)
     print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
-    fitter = FitterGP(X_train, y_train, y_err_train, 
+    fitter = FitterGP(X_train, y_train, y_err_train, set_mean=set_mean,
                       x_scale_name=x_scale_name, y_scale_name=y_scale_name)
     fitter.train()
     print("Predicting", flush=True)
@@ -217,8 +222,10 @@ class Fitter():
 
 
 class FitterGP(Fitter):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, set_mean=False, **kwargs):
         super().__init__(*args, **kwargs)
+        print("set_mean =", set_mean)
+        self.set_mean = set_mean
 
 
     def train(self):
@@ -228,12 +235,20 @@ class FitterGP(Fitter):
         p0 = np.exp(np.full(n_params, 0.1))
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
+        if self.set_mean:
+            mean = np.mean(self.y_train_scaled)
+            fit_mean = True
+        else:
+            mean = 0.0
+            fit_mean = False
+
         #print("using hodlr solver")
         #self.gp = george.GP(kernel, solver=george.HODLRSolver)
-        self.gp = george.GP(kernel)
+        self.gp = george.GP(kernel, mean=mean, fit_mean=fit_mean)
         print('p init:', self.gp.get_parameter_vector())
         print(self.X_train_scaled)
         print(self.y_err_train_scaled)
+
         self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
         print('p compute:', self.gp.get_parameter_vector())
         print('lnlike compute:', self.gp.log_likelihood(self.y_train_scaled))

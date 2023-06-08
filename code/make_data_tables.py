@@ -54,7 +54,7 @@ def main():
 
     ### Adjust and combine labeled data
     #remove_duplicate_sources(overwrite=overwrite)
-    make_labeled_table(overwrite=overwrite)
+    #make_labeled_table(overwrite=overwrite)
     
     #get_gaia_xsdssfootprint(overwrite=overwrite)
 
@@ -65,12 +65,11 @@ def main():
     #gaia_clean(overwrite=overwrite)
 
     #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
-    #G_maxs = [20.0, 20.5]
-    # G_maxs = [20.6]
-    # for G_max in G_maxs:
-    #      merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
-
-    # make_public_catalog(G_max=20.6, overwrite=overwrite)
+    G_maxs = [20.0, 20.5]
+    #G_maxs = [20.6]
+    for G_max in G_maxs:
+    #    merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
+        make_public_catalog(G_max=G_max, overwrite=overwrite)
 
     # G_max = 20.5
     # n_zbins = 3
@@ -153,14 +152,16 @@ def eboss_slim(overwrite=False):
 
 
 
-def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz_kNN_K27_std.fits',
-                                G_max=20.5, overwrite=False):
+def merge_gaia_spzs_and_cutGmax(G_max=20.5, overwrite=False):
+
+    tag_qspec = '_qeboss'
 
     # save name
-    fn_gcat = f'../data/catalog_G{G_max}.fits'
+    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}.fits'
 
     # data paths
-    fn_gaia = '../data/gaia_candidates_clean.fits'
+    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}.fits'
+    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}_kNN_K27_std.fits'
 
     # load data, cut to G_max
     tab_gaia = utils.load_table(fn_gaia)
@@ -179,10 +180,12 @@ def merge_gaia_spzs_and_cutGmax(fn_spz='../data/redshift_estimates/redshifts_spz
 
 def make_public_catalog(G_max=20.5, overwrite=False):
 
+    tag_qspec = '_qeboss'
+
     # working catalog
-    fn_gcat = f'../data/catalog_G{G_max}.fits'
+    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}.fits'
     # update to final name choice!
-    fn_public = f'../data/QUaia_G{G_max}.fits'
+    fn_public = f'../data/QUaia_G{G_max}{tag_qspec}.fits'
 
     tab_gcat = utils.load_table(fn_gcat)
 
@@ -543,8 +546,9 @@ def mcs_xgaia(overwrite=False):
 def remove_duplicate_sources(overwrite=False):
 
     print("Loading tables")
-    tag_qspec = '_eboss'
-    fn_quasars = f'../data/quasars{tag_qspec}_xgaia_xunwise_good.fits'
+    name_qspec = 'eboss'
+    tag_qspec = '_qeboss'
+    fn_quasars = f'../data/quasars_{name_qspec}_xgaia_xunwise_good.fits'
     fn_galaxies = '../data/galaxies_sdss_xgaia_xunwise_good.fits'
     fn_stars = '../data/stars_sdss_xgaia_xunwise_good.fits'
     # don't need to include MCs here bc there is no overlap bw MCs and SDSS
@@ -580,7 +584,11 @@ def remove_duplicate_sources(overwrite=False):
 
 def make_labeled_table(overwrite=False):
 
-    tag_qspec = '_eboss'
+    # name_qspec = 'sdss'
+    # tag_qspec = ''
+    name_qspec = 'eboss'
+    tag_qspec = '_qeboss'
+
     # save to:
     fn_labeled = f'../data/labeled_superset{tag_qspec}.fits'
 
@@ -589,7 +597,7 @@ def make_labeled_table(overwrite=False):
     tab_gsup = utils.load_table(fn_gsup)
 
     # Our labels come from SDSS
-    tab_squasars = utils.load_table(f'../data/quasars{tag_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits')
+    tab_squasars = utils.load_table(f'../data/quasars_{name_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits')
     print(f"Number of SDSS quasars: {len(tab_squasars)}")
 
     tab_sstars = utils.load_table(f'../data/stars_sdss_xgaia_xunwise_good_nodup{tag_qspec}.fits')
@@ -622,6 +630,7 @@ def make_labeled_table(overwrite=False):
     # (Still useful for plotting so it's ok!)
     # We matched the SDSS samples on their gaia match's RA and dec, so the wise properties 
     # are guaranteed to be the same as the gaia candidates 
+    # NOTE except for the eboss quasars, which we matched on sdss ra and dec bc not all have gaia... 
     tab_labeled_sup = join(tab_labeled, tab_gsup, join_type='inner', keys='source_id')
     print(f"N={len(tab_labeled_sup)} labeled sources are in superset (out of {len(tab_labeled)}); keeping those only")
 
