@@ -7,7 +7,7 @@
 ##SBATCH --job-name=make_table_G20.6
 ##SBATCH --job-name=decontaminate_mag0.1_lm5_postpm_qeboss
 ##SBATCH --job-name=sel_func_G20.5_zsplit3bin2
-#SBATCH --job-name=sel_func_G20.0_setmean
+#SBATCH --job-name=sel_func_G20.0_setmean_nofitmean
 ##SBATCH --job-name=sel_func_G20.0_NSIDE64_fixzeros_mem350_cpu24_hodlr
 ##SBATCH --job-name=animate_sdss
 #SBATCH --output=logs/%x.out

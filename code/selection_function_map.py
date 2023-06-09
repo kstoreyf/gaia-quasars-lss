@@ -25,11 +25,11 @@ def main():
     set_mean = True
     tag_sel = ''
     if set_mean:
-        tag_sel += '_setmean'
+        tag_sel += '_setmean_nofitmean'
 
     #tag_cat = '_zsplit3bin2'
-    #tag_cat = '_qeboss'
     tag_cat = ''
+    #tag_cat = ''
     #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
     fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
     overwrite = True
@@ -238,7 +238,8 @@ class FitterGP(Fitter):
 
         if self.set_mean:
             mean = np.mean(self.y_train_scaled)
-            fit_mean = True
+            #fit_mean = True
+            fit_mean = False
         else:
             mean = 0.0
             fit_mean = False
