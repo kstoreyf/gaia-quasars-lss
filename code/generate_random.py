@@ -53,15 +53,18 @@ def main():
         tag_rand += f'_maskdust{Av_max}'
 
     tag_cat = '_qeboss'
+    #tag_sel = '_setmean'
+    tag_sel = ''
+    
     #fn_rand = f'../data/randoms/random{tag_rand}_{fac_rand}x.fits'
-    fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}_{fac_rand}x.fits'
+    fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x.fits'
     overwrite = True
     NSIDE_masks = 64
     rng = default_rng(seed=42)
     fn_dustmap = f'../data/dustmap_Avmean_NSIDE{NSIDE_dustmap}.npy'
     fn_starmap = f'../data/stardensmap_NSIDE{NSIDE_starmap}.npy'
     #fn_probmap = f'../data/maps/map_probability_dust_stars_m10_mcs_NSIDE{NSIDE_probmap}_G{G_max}.fits'
-    fn_probmap = f'../data/maps/selection_function_NSIDE{NSIDE_probmap}_G{G_max}{tag_cat}.fits'
+    fn_probmap = f'../data/maps/selection_function_NSIDE{NSIDE_probmap}_G{G_max}{tag_cat}{tag_sel}.fits'
 
     # Load and set up data
     print("Loading data")

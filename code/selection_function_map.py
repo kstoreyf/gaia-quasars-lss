@@ -25,7 +25,7 @@ def main():
     set_mean = True
     tag_sel = ''
     if set_mean:
-        tag_sel += 'setmean'
+        tag_sel += '_setmean'
 
     #tag_cat = '_zsplit3bin2'
     #tag_cat = '_qeboss'
