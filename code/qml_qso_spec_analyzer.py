@@ -82,18 +82,19 @@ def main(args):
 
     # systematics maps
     if args.systematics:
-        do_g_syst=False
+        do_g_syst=True
         syst=[]
         if 'dust' in args.systematics:
             print("Deproject dust")
             syst.append(rot.rotate_map_pixel(np.load('%s/map_dust_NSIDE64.npy'%args.catalog_path)))
         if 'm10' in args.systematics:    
             print("Deproject m10")
-            m10 = rot.rotate_map_pixel(np.load('%s/map_m10_NSIDE64.npy'%args.catalog_path))
+            syst.append(rot.rotate_map_pixel(np.load('%s/map_m10_NSIDE64.npy'%args.catalog_path)))
         if 'mcs' in args.systematics:    
             print("Deproject mcs")
             mcs = rot.rotate_map_pixel(np.load('%s/map_mcs_NSIDE64.npy'%args.catalog_path))
             mcs[mcs<0] = 0.
+            syst.append(mcs)
         if 'star_wise' in args.systematics:   
             print("Deproject stars wise")
             syst.append(rot.rotate_map_pixel(hp.read_map('%s/allwise_total_rot_1024.fits'%args.catalog_path)))                        
@@ -103,9 +104,10 @@ def main(args):
     
         if not len(syst):
             raise ValueError("Systematics list not including valuable templates: %s"%args.systematics) 
+        else:
+            print("Deprojecting a total of %d templates"%len(syst))
         syst_lr = [hp.ud_grade(s,nside_out=nside) for s in syst]
         syst_hr = [hp.ud_grade(s,nside_out=nside_hr) for s in syst]
-
     else:
         syst=[]
         do_g_syst=False
@@ -302,9 +304,22 @@ def main(args):
                 #out_fname = '/Users/gfabbian/Work/quasar_gaia/output/PR4_%s_60_nogpixwin_gdipole_dl%d_nmt_alldip10k_nokdip.pkl'%(str(remove_dipole_monopole),dell)
                 out_fname = args.out_file
 
-                if False:#os.path.exists(out_fname):
+                if (os.path.exists(out_fname) and args.update_file):
                     with open(out_fname,"rb") as f:
-                        data_pkl=pkl.load(f)
+                        data_file=pkl.load(f)
+                    data_pkl = data_file['qml']
+                    data_nmt = data_file['nmt']
+                    for k in noise_models:
+                        if k in data_pkl.keys():
+                            continue
+                        else:
+                            print("updating key",k)
+                            data_pkl[k]={'data':{},'sims':{}}
+                            keys_nmt = [('k','k'),('k','g_sel'),('g_sel','g_sel'),('g1_sel','g1_sel'),('g2_sel','g2_sel'),('g1_sel','g2_sel'),('gjk_sel','gjk_sel'),('k','gjk_sel'),('k','k_in'),('k_in','k_in')]
+                            data_nmt[k]={'data':{},'sims':{}}
+                            for key_nmt in keys_nmt:
+                                data_nmt[k]['sims'][key_nmt]=[]
+
                     data_pkl['lb'] = lb
                     data_pkl['lbounds'] = [lmin,lmax]
                     data_pkl['dell'] = dell                    
@@ -399,11 +414,10 @@ def main(args):
                     if do_g_syst:
                         for t in syst_lr:
                            local_t = prepare_sysmap(t, mask)
-                           g_dipole_rescale+= 1000*np.outer(local_t[mask],local_t[mask])
+                           #g_dipole_rescale+= 1000*np.outer(local_t[mask],local_t[mask])
                         nmt_syst = [[prepare_sysmap(t,((mask_hr>0) & (t>0)))] for t in syst_hr]
                     else:
                         nmt_syst = None
-
                     low_noise_rescaling=100
                     #low_noise_rescaling=1000
 
@@ -519,7 +533,7 @@ def main(args):
                         km = np.zeros((1,npix))
                         km_signal = np.zeros((1,npix))
 
-                        print("Processing %d simulations",nsims)
+                        print("Processing %d simulations"%nsims)
                         for n in range(nsims):
                             if args.verbose:
                                 progress_bar(n, nsims)
@@ -699,6 +713,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_galsplit',dest='n_galsplit',action='store',type=int,default=100,help='number of catalog splits used to compute galaxy splits and jackknives')
     parser.add_argument('--cl_theory',dest='cl_theory',action='store',type=str,default='/Users/gfabbian/Work/quasar_gaia/gaia-quasars-lss/notebooks/camb_thcl_ffp10.pkl',help='Theory cl')
     parser.add_argument('--binning',dest='binning',action='store',type=str,default='desi',help='bin spacing or desi for custom binning')
+    parser.add_argument('--update_file',dest='update_file',action='store_true',help='update existing file instead of creating a new one')
     parser.add_argument('-v', '--verbose',dest='verbose',action='store_true')
 
     args = parser.parse_args()
