@@ -44,16 +44,19 @@ def main():
     #redshift_estimator_name = 'xgboost'
     save_tag_model = f'_{redshift_estimator_name}_K{K}_std'
 
-    name_qspec = 'eboss'
-    tag_qspec = '_qeboss'
+    tag_cat = '_mags-0.05'
+    name_qspec = 'sdss'
+    tag_qspec = ''
+    # name_qspec = 'eboss'
+    # tag_qspec = '_qeboss'
 
     # Data file names
-    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}.fits'
-    fn_labeled = f'../data/quasars_{name_qspec}_clean.fits'
+    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
+    fn_labeled = f'../data/quasars_{name_qspec}_clean{tag_cat}.fits'
     
-    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}{save_tag_model}.fits'
-    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled{tag_qspec}{save_tag_model}.fits'
-    fn_model = f'../data/redshift_models/model_spz{tag_qspec}{save_tag_model}.fits'
+    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}{tag_cat}{save_tag_model}.fits'
+    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled{tag_qspec}{tag_cat}{save_tag_model}.fits'
+    fn_model = f'../data/redshift_models/model_spz{tag_qspec}{tag_cat}{save_tag_model}.fits'
 
     run(fn_gaia, fn_labeled, fn_spz, fn_spz_labeled, fn_model, K=K)
     combine_with_gaia_redshifts(fn_spz_labeled)

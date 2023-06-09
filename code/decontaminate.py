@@ -13,27 +13,30 @@ import utils
 def main():
     tag_decontam = '_mag0.1_lm5_postpm'
     
-    name_qspec = 'eboss'
-    tag_qspec = '_qeboss'
-
+    tag_cat = '_mags-0.05'
+    name_qspec = 'sdss'
+    tag_qspec = ''
+    # name_qspec = 'eboss'
+    # tag_qspec = '_qeboss'
+    
     overwrite_table = True
     overwrite_conf_mats = False
 
-    fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_qspec}{tag_decontam}.npy'
-    fn_cuts = f'../data/color_cuts{tag_qspec}{tag_decontam}.txt'
-    fn_labeled = f'../data/labeled_superset{tag_qspec}.fits'
+    fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_qspec}{tag_cat}{tag_decontam}.npy'
+    fn_cuts = f'../data/color_cuts{tag_qspec}{tag_cat}{tag_decontam}.txt'
+    fn_labeled = f'../data/labeled_superset{tag_qspec}{tag_cat}.fits'
 
-    fn_gaia_orig = '../data/gaia_candidates_superset.fits'
-    fn_gaia_clean = f'../data/gaia_candidates_clean{tag_qspec}.fits'
+    fn_gaia_orig = f'../data/gaia_candidates_superset{tag_cat}.fits'
+    fn_gaia_clean = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
 
-    fn_sdss = f'../data/quasars_{name_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits'
-    fn_sdss_clean = f'../data/quasars_{name_qspec}_clean.fits'
+    fn_sdss = f'../data/quasars_{name_qspec}_xgaia_xunwise_good_nodup{tag_qspec}{tag_cat}.fits'
+    fn_sdss_clean = f'../data/quasars_{name_qspec}_clean{tag_cat}.fits'
 
     proper_motion_cut = True
 
     s = time.time()
     # Compute cuts
-    #compute(fn_labeled, fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
+    compute(fn_labeled, fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
     # Apply to Gaia catalog
     make_clean_subsample(fn_gaia_orig, fn_gaia_clean, fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
     # Apply to spec quasars

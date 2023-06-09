@@ -64,12 +64,15 @@ def main():
     #gaia_slim_xsdss(overwrite=overwrite)
     #gaia_clean(overwrite=overwrite)
 
-    #G_maxs = [19.8, 19.9, 20.0, 20.1, 20.2, 20.3, 20.4]
+    #perturbed_magnitude_catalogs(mag_perturb=-0.05, overwrite=overwrite)
+
+    tag_qspec = ''
+    tag_cat = '_mags-0.05'
     G_maxs = [20.0, 20.5]
     #G_maxs = [20.6]
     for G_max in G_maxs:
-    #    merge_gaia_spzs_and_cutGmax(G_max=G_max, overwrite=overwrite)
-        make_public_catalog(G_max=G_max, overwrite=overwrite)
+        merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
+        make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
     # G_max = 20.5
     # n_zbins = 3
@@ -80,6 +83,7 @@ def main():
     # tab_gaia = utils.load_table(fn_gaia_slim)
     # fn_csv = '../data/gaia_candidates.csv'
     # save_as_csv(tab_gaia, ['source_id', 'ra', 'dec'], fn_csv, overwrite=overwrite)
+
 
 
 
@@ -152,16 +156,14 @@ def eboss_slim(overwrite=False):
 
 
 
-def merge_gaia_spzs_and_cutGmax(G_max=20.5, overwrite=False):
-
-    tag_qspec = '_qeboss'
+def merge_gaia_spzs_and_cutGmax(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
 
     # save name
-    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}.fits'
+    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}{tag_cat}.fits'
 
     # data paths
-    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}.fits'
-    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}_kNN_K27_std.fits'
+    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
+    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}{tag_cat}_kNN_K27_std.fits'
 
     # load data, cut to G_max
     tab_gaia = utils.load_table(fn_gaia)
@@ -178,14 +180,12 @@ def merge_gaia_spzs_and_cutGmax(G_max=20.5, overwrite=False):
 
 
 
-def make_public_catalog(G_max=20.5, overwrite=False):
-
-    tag_qspec = '_qeboss'
+def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
 
     # working catalog
-    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}.fits'
+    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}{tag_cat}.fits'
     # update to final name choice!
-    fn_public = f'../data/QUaia_G{G_max}{tag_qspec}.fits'
+    fn_public = f'../data/QUaia_G{G_max}{tag_qspec}{tag_cat}.fits'
 
     tab_gcat = utils.load_table(fn_gcat)
 
@@ -196,8 +196,6 @@ def make_public_catalog(G_max=20.5, overwrite=False):
                        'mag_w1_vg', 'mag_w2_vg', 
                        'pm', 'pmra', 'pmdec', 'pmra_error', 'pmdec_error']
 
-    # tab_public = Table(names=columns_to_keep, units=utils.label2unit_dict,
-    #             descriptions=utils.label2description_dict)
     tab_public = Table()
     tab_public.meta = {'name': 'Quasars with unWISE and \emph{{Gaia}} Catalog',
                        'abbrv': 'QUaia'
@@ -685,6 +683,40 @@ def make_labeled_sdssfootprint_table():
     tab_gcand_xsdssfootprint = utils.load_table(fn_xsdssfootprint)
     print(f"Number of Gaia quasar candidates in SDSS footprint: {len(tab_gcand_xsdssfootprint)}")
 
+
+def perturbed_magnitude_catalogs(mag_perturb=0.05, overwrite=False):
+
+    tag_cat = f'_mags{mag_perturb}'
+
+    # the only one that will matter is G in current setup, but perturb all for completeness
+    mag_names = ['phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
+                 'mag_w1_vg', 'mag_w2_vg', 
+                 'u_mag_sdss', 'g_mag_sdss', 'r_mag_sdss', 'i_mag_sdss', 'z_mag_sdss']
+
+    # name_qspec = 'eboss'
+    # tag_qspec = '_qeboss'
+    name_qspec = 'sdss'
+    tag_qspec = ''
+
+    fn_gsup = '../data/gaia_candidates_superset.fits'
+    fn_labeled = f'../data/labeled_superset{tag_qspec}.fits'
+    fn_sdss = f'../data/quasars_{name_qspec}_xgaia_xunwise_good_nodup{tag_qspec}.fits'
+    # don't need the good_nodup of gals and stars bc those just go into fn_labeled;
+    # only need fn_sdss independently (for specphotoz, and decontaminate to prep for that)
+    # dont need quasars xgaiaall because only use that for plotting, comparison (i think)
+
+    fns = [fn_gsup, fn_labeled, fn_sdss]
+    for fn in fns:
+        print(fn)
+        tab = utils.load_table(fn)
+        #print(tab['phot_g_mean_mag'])
+        for mag_name in mag_names:
+            if mag_name in tab.columns:
+                tab[mag_name] += mag_perturb
+        #print(tab['phot_g_mean_mag'])            
+        fn_save = fn.split('.fits')[0] + tag_cat + '.fits'
+        tab.write(fn_save, overwrite=overwrite)
+        print(f"Wrote table with {len(tab)} objects to {fn_save}")
 
 
 def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False, 

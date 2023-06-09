@@ -28,7 +28,8 @@ def main():
         tag_sel += 'setmean'
 
     #tag_cat = '_zsplit3bin2'
-    tag_cat = '_qeboss'
+    #tag_cat = '_qeboss'
+    tag_cat = ''
     #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
     fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
     overwrite = True
