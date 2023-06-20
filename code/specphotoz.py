@@ -189,7 +189,6 @@ def run(fn_gaia, fn_labeled, fn_spz, fn_spz_labeled, fn_model,
     #                X_train, Y_train,
     #                redshift_estimator_kwargs, rng)
 
-    
 
     if mode=='regression':
         if os.path.exists(fn_model) and not overwrite_model:

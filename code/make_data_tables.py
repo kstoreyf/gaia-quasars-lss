@@ -67,16 +67,17 @@ def main():
     #perturbed_magnitude_catalogs(mag_perturb=-0.05, overwrite=overwrite)
 
     tag_qspec = ''
-    tag_cat = '_mags-0.05'
+    #tag_cat = '_mags-0.05'
+    tag_cat = ''
     G_maxs = [20.0, 20.5]
     #G_maxs = [20.6]
     for G_max in G_maxs:
-        merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
+        #merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
         make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
-    # G_max = 20.5
-    # n_zbins = 3
-    # make_redshift_split_catalogs(G_max, n_zbins)
+    G_max = 20.5
+    n_zbins = 2
+    make_redshift_split_catalogs(G_max, n_zbins)
 
     # save as csv
     # fn_gaia_slim = '../data/gaia_slim.fits'
@@ -185,7 +186,7 @@ def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
     # working catalog
     fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}{tag_cat}.fits'
     # update to final name choice!
-    fn_public = f'../data/QUaia_G{G_max}{tag_qspec}{tag_cat}.fits'
+    fn_public = f'../data/quaia_G{G_max}{tag_qspec}{tag_cat}.fits'
 
     tab_gcat = utils.load_table(fn_gcat)
 
@@ -197,38 +198,48 @@ def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
                        'pm', 'pmra', 'pmdec', 'pmra_error', 'pmdec_error']
 
     tab_public = Table()
-    tab_public.meta = {'name': 'Quasars with unWISE and \emph{{Gaia}} Catalog',
-                       'abbrv': 'QUaia'
+    tab_public.meta = {'name': '\emph{{Gaia}}--\emph{{unWISE}} Quasar Catalog',
+                       'abbrv': 'Quaia'
                        }
+
+    rename_dict = {'redshift_spz': 'redshift_quaia',
+                   'redshift_spz_err': 'redshift_quaia_err'
+                   }
+
     for cn in columns_to_keep:
-        tab_public[cn] = tab_gcat[cn]
-        tab_public[cn].info.unit = utils.label2unit_dict[cn]
-        tab_public[cn].info.description = utils.label2description_dict[cn]
+        if cn in rename_dict:
+            cn_new = rename_dict[cn]
+        else: 
+            cn_new = cn
+        tab_public[cn_new] = tab_gcat[cn]
+        tab_public[cn_new].info.unit = utils.label2unit_dict[cn_new]
+        tab_public[cn_new].info.description = utils.label2description_dict[cn_new]
     
     # for tc in tab_public.columns:
     #     print(tc, tab_public[tc].info.unit)
-    #print(tab_public)
+    print(tab_public.columns)
     tab_public.write(fn_public, overwrite=overwrite)
     print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
 
 
 def make_redshift_split_catalogs(G_max, n_zbins, overwrite=True):
 
-    fn_gcat = f'../data/QUaia_G{G_max}.fits'
+    fn_gcat = f'../data/quaia_G{G_max}.fits'
     tab_gcat = utils.load_table(fn_gcat)
     z_percentiles = np.linspace(0.0, 100.0, n_zbins+1)
     print(z_percentiles)
-    z_bins = np.percentile(list(tab_gcat['redshift_spz']), z_percentiles)
+    z_bins = np.percentile(list(tab_gcat['redshift_quaia']), z_percentiles)
     z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
+    z_bins[0] -= 0.01 # add a bit to minimum bin to make sure the lowest-z source gets included
     print("zbins:", z_bins)
 
     for bb in range(n_zbins):
-        i_zbin = (tab_gcat['redshift_spz'] >= z_bins[bb]) & (tab_gcat['redshift_spz'] < z_bins[bb+1])
+        i_zbin = (tab_gcat['redshift_quaia'] >= z_bins[bb]) & (tab_gcat['redshift_quaia'] < z_bins[bb+1])
         tab_gcat_zbin = tab_gcat[i_zbin]
-        fn_gcat_zbin = f'../data/QUaia_G{G_max}_zsplit{n_zbins}bin{bb}.fits'
+        fn_gcat_zbin = f'../data/quaia_G{G_max}_zsplit{n_zbins}bin{bb}.fits'
         tab_gcat_zbin.write(fn_gcat_zbin, overwrite=overwrite)
-        print("zmin:", np.min(tab_gcat_zbin['redshift_spz']))
-        print("zmax:", np.max(tab_gcat_zbin['redshift_spz']))
+        print("zmin:", np.min(tab_gcat_zbin['redshift_quaia']))
+        print("zmax:", np.max(tab_gcat_zbin['redshift_quaia']))
         print(f"Wrote table with {len(tab_gcat_zbin)} objects to {fn_gcat_zbin}")
 
 

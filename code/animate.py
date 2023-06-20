@@ -22,15 +22,20 @@ def main():
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_photoz.fits'
     #fn_data = '/scratch/ksf293/gaia-quasars-lss/data/gaia_wise_panstarrs_tmass.fits.gz'
     G_max = 20.5
-    #data_tag = f'gcathi'
-    data_tag = 'sdss'
+    data_tag = f'gcathi'
+    #data_tag = 'sdss'
+    tag_cat = ''
 
-    plot_dir = '../plots/2023-04-04_figures'
+    #plot_dir = '../plots/2023-04-04_figures'
     anim_dir = '../plots/2023-05-27_animations'
+    plot_dir = anim_dir
+    make_image = True
+    make_anim = True
+    tag_anim = '_alpha0.1_black'
 
     if 'gcat' in data_tag:
-        fn_data = f'../data/QUaia_G{G_max}.fits'
-        #title = f'QUaia ($G<{G_max}$)'
+        fn_data = f'../data/quaia_G{G_max}{tag_cat}.fits'
+        #title = f'Quaia ($G<{G_max}$)'
         title = None
         colorbar_label = r'redshift $z$'
         redshift_name = 'redshift_spz'
@@ -45,23 +50,30 @@ def main():
         property_colorby = redshift_name
         ra_name, dec_name = 'ra_sdss', 'dec_sdss'
 
+    # mp4 works, unsure about gif rn
     #format_save = 'gif'
     format_save = 'mp4'
     #N_sub_str = '1e3'
     N_sub_str = 'all'
     
-    fn_save = f'{anim_dir}/{data_tag}_N{N_sub_str}_{property_colorby}.{format_save}'
-    fn_save_init = f'{plot_dir}/{data_tag}_N{N_sub_str}_{property_colorby}_3d.png'
+    fn_save = f'{anim_dir}/animation_{data_tag}_N{N_sub_str}_{property_colorby}{tag_anim}.{format_save}'
+    fn_save_init = f'{plot_dir}/image_{data_tag}_N{N_sub_str}_{property_colorby}{tag_anim}_3d.png'
 
     if N_sub_str=='all':
+        #alpha = 0.1
+        #s = 0.11
+        # alpha = 0.03
+        # s = 0.1
         alpha = 0.1
-        s = 0.11
+        s = 0.03
     else:
         # to make visible for tests
         alpha = 1
         s = 4
     lim = 3000
     vmin, vmax = 0, 4.5
+    #facecolor = 'white'
+    facecolor = 'black'
 
     print("Reading data:", fn_data)
     tab = Table.read(fn_data, format='fits')
@@ -70,28 +82,38 @@ def main():
     tab = prepare_data(tab, redshift_name, ra_name=ra_name, dec_name=dec_name, 
                         N_sub_str=N_sub_str)
 
-    scmap = utils.shiftedColorMap(matplotlib.cm.plasma_r, start=0.2, midpoint=0.6, stop=1.0, name='plasma_shifted')
+    if facecolor=='black':
+        scmap = utils.shiftedColorMap(matplotlib.cm.plasma, start=0.2, midpoint=0.6, stop=1.0, name='plasma_shifted')
+    else:
+        # white is default
+        scmap = utils.shiftedColorMap(matplotlib.cm.plasma_r, start=0.2, midpoint=0.6, stop=1.0, name='plasma_r_shifted')
+    
     # Create an init function and the animate functions.
     print(f"s = {s}, alpha={alpha}, lim={lim}, vmin={vmin}, vmax={vmax}")
 
-    plot_init(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
-                 cmap=scmap, colorbar_label=colorbar_label,
-                 fn_save_init=fn_save_init)
+    if make_image:
+        plot_init(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
+                    cmap=scmap, colorbar_label=colorbar_label,
+                    fn_save_init=fn_save_init, facecolor=facecolor)
+        print("Saved image!")
 
-    anim = make_anim(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
-                     cmap=scmap, title=title, colorbar_label=colorbar_label)
+    if make_anim:
+        anim = make_animation(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
+                        cmap=scmap, title=title, colorbar_label=colorbar_label,
+                        facecolor=facecolor)
 
-    print("Saving animation to", fn_save)
-    s = time.time()
-    if format_save=='gif':
-        anim.save(fn_save, writer=PillowWriter(fps=32)) 
-                  #savefig_kwargs={'bbox_inches': 'tight'})
-    elif format_save=='mp4':
-        anim.save(fn_save, fps=30, extra_args=['-vcodec', 'libx264'])
-    e = time.time()
-    print("Save time:", e-s)
+        print("Saving animation to", fn_save)
+        s = time.time()
+        if format_save=='gif':
+            anim.save(fn_save, writer=PillowWriter(fps=32), 
+                      )
+        elif format_save=='mp4':
+            anim.save(fn_save, fps=30, extra_args=['-vcodec', 'libx264'],
+                      )
+        e = time.time()
+        print("Save time:", e-s)
     
-    print("Saved!")
+   
 
 
 def prepare_data(tab, redshift_name, ra_name='ra', dec_name='dec', 
@@ -119,11 +141,12 @@ def prepare_data(tab, redshift_name, ra_name='ra', dec_name='dec',
 
 def plot_init(tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
                   title=None, colorbar_label=r'redshift $z$', colorbar=True,
-                  fn_save_init=None):
+                  fn_save_init=None, facecolor='white'):
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(projection='3d')
     init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap=cmap, 
                    title=title, colorbar_label=colorbar_label, colorbar=colorbar,
+                   facecolor=facecolor
                    #fn_save_init=fn_save_init,
                    )
     if fn_save_init is not None:
@@ -132,7 +155,7 @@ def plot_init(tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
 
 def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
                   title=None, colorbar_label=r'redshift $z$', colorbar=True,
-                  fn_save_init=None):
+                  fn_save_init=None, facecolor='white'):
     #fig = plt.figure(figsize=(10,10))
     #ax = fig.add_subplot(projection='3d')
     ax.scatter(tab['x'], tab['y'], tab['z'], c=c, s=s, 
@@ -144,7 +167,7 @@ def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
     ax.set_zlim(-lim, lim)
-    ax.set_facecolor('white')
+    ax.set_facecolor(facecolor)
     if title is not None:
         ax.set_title(title, y=1.03, fontsize=28)
 
@@ -169,11 +192,14 @@ def init_animation(fig, ax, tab, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
     #return fig,
 
 
-def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
-              title=None, colorbar_label=r'redshift $z$', colorbar=True):
+def make_animation(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r', 
+              title=None, colorbar_label=r'redshift $z$', colorbar=True,
+              facecolor='white'):
     # Create a figure and a 3D Axes
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(projection='3d')
+    fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=None, hspace=None)
+
     #ax = Axes3D(fig)
 
     def init():
@@ -186,8 +212,7 @@ def make_anim(data, c, s, alpha, lim, vmin, vmax, cmap='plasma_r',
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim, lim)
         ax.set_zlim(-lim, lim)
-        #ax.set_facecolor('black')
-        ax.set_facecolor('white')
+        ax.set_facecolor(facecolor)
         if title is not None:
             ax.set_title(title, y=1.03, fontsize=28)
 
