@@ -12,27 +12,43 @@ import utils
 
 def main():
     tag_decontam = '_mag0.1_lm5_postpm'
-    #tag_decontam = '_manual'
-    #tag_decontam = '_mag0.1_wdiag'
+    
+    tag_cat = '_mags-0.05'
+    name_qspec = 'sdss'
+    tag_qspec = ''
+    # name_qspec = 'eboss'
+    # tag_qspec = '_qeboss'
+    
+    overwrite_table = True
     overwrite_conf_mats = False
-    fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_decontam}.npy'
-    fn_cuts = f'../data/color_cuts{tag_decontam}.txt'
+
+    fn_conf_mats = f'../data/decontamination_models/conf_mats{tag_qspec}{tag_cat}{tag_decontam}.npy'
+    fn_cuts = f'../data/color_cuts{tag_qspec}{tag_cat}{tag_decontam}.txt'
+    fn_labeled = f'../data/labeled_superset{tag_qspec}{tag_cat}.fits'
+
+    fn_gaia_orig = f'../data/gaia_candidates_superset{tag_cat}.fits'
+    fn_gaia_clean = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
+
+    fn_sdss = f'../data/quasars_{name_qspec}_xgaia_xunwise_good_nodup{tag_qspec}{tag_cat}.fits'
+    fn_sdss_clean = f'../data/quasars_{name_qspec}_clean{tag_cat}.fits'
+
     proper_motion_cut = True
 
     s = time.time()
-    #compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
-    overwrite_table = True
-    apply_to_gaia_quasar_catalog(fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
-    apply_to_sdss_quasars(overwrite=overwrite_table)
+    # Compute cuts
+    compute(fn_labeled, fn_conf_mats, fn_cuts, overwrite_conf_mats=overwrite_conf_mats, proper_motion_cut=proper_motion_cut)
+    # Apply to Gaia catalog
+    make_clean_subsample(fn_gaia_orig, fn_gaia_clean, fn_cuts, proper_motion_cut=proper_motion_cut, overwrite=overwrite_table)
+    # Apply to spec quasars
+    apply_to_sdss_quasars(fn_sdss, fn_sdss_clean, fn_gaia_clean, overwrite=overwrite_table)
     e = time.time()
     print(f"Time: {e-s} s ({(e-s)/60} min)")
 
 
-def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
+def compute(fn_labeled, fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
             proper_motion_cut=True):
 
     # Labeled sample
-    fn_labeled = '../data/labeled_superset.fits'
     tab_labeled = utils.load_table(fn_labeled)
     print(f"Number of labeled Gaia quasar candidates for training/validation: {len(tab_labeled)}")
     class_labels = ['q', 's', 'g', 'm']
@@ -66,25 +82,21 @@ def compute(fn_conf_mats, fn_cuts, overwrite_conf_mats=False,
     get_best_cuts(fn_conf_mats, class_labels, fn_cuts=fn_cuts)
     print("Done!")
 
-    
-def apply_to_gaia_quasar_catalog(fn_cuts, overwrite=False, proper_motion_cut=True):
-    fn_orig = '../data/gaia_candidates_superset.fits'
-    fn_clean = '../data/gaia_candidates_clean.fits'
-    make_clean_subsample(fn_cuts, fn_orig, fn_clean, proper_motion_cut=proper_motion_cut, overwrite=overwrite)
-    
 
-def apply_to_sdss_quasars(overwrite=False, proper_motion_cut=True):
 
-    fn_sdss_clean = '../data/quasars_sdss_clean.fits'
+def apply_to_sdss_quasars(fn_sdss, fn_sdss_clean, fn_gaia_clean, 
+                          overwrite=False, proper_motion_cut=True):
 
     print("Load in data")
-    fn_sdss = '../data/quasars_sdss_xgaia_xunwise_good_nodup.fits'
     tab_sdss = utils.load_table(fn_sdss)
 
-    fn_gaia_clean = '../data/gaia_candidates_clean.fits'
     tab_gaia_clean = utils.load_table(fn_gaia_clean)
+    if 'sdss' in fn_sdss:
+        id_name = 'objid'
+    elif 'eboss' in fn_sdss:
+        id_name = 'id'
 
-    tab_sdss.keep_columns(['source_id', 'z_sdss', 'objid'])
+    tab_sdss.keep_columns(['source_id', 'z_sdss', id_name])
     tab_sdss_clean = join(tab_sdss, tab_gaia_clean, join_type='inner', keys='source_id')
     print(f"SDSS quasars in clean Gaia sample: N={len(tab_sdss_clean)}")
     
@@ -220,7 +232,7 @@ def get_best_cuts(fn_conf_mats, class_labels, fn_cuts=None):
     return slopes, intercepts_best, indices_best
 
 
-def make_clean_subsample(fn_cuts, fn_orig, fn_clean, 
+def make_clean_subsample(fn_orig, fn_clean, fn_cuts,
                          proper_motion_cut=True, overwrite=False):
     
     # Load data

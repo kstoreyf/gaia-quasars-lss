@@ -1,4 +1,7 @@
+import argparse
 import numpy as np
+import os
+import sys
 import time
 
 from scipy.optimize import minimize
@@ -10,82 +13,112 @@ import masks
 import maps
 
 
-def main():
 
+def parse_args():
+    parser=argparse.ArgumentParser(description="make selection function map for input catalog")
+    parser.add_argument("catalog_fn", type=str, nargs='?')
+    parser.add_argument("selfunc_fn", type=str, nargs='?', default='selection_function.fits')
+                        #action='store_const', const='selection_function.fits')
+    args=parser.parse_args()
+
+    if args.catalog_fn is None:
+        main()    
+    else:
+        print(f"Running selection function with catalog_fn={args.catalog_fn}, selfunc_fn={args.selfunc_fn}")
+        run(args.catalog_fn, args.selfunc_fn)
+
+
+def main():
+    print("starting selection function", flush=True)
+
+    tag_sel = ''
+    G_max = 20.0
+    tag_cat = ''
+    #tag_cat = '_zsplit3bin2'
+    fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
 
     map_names = ['dust', 'stars', 'm10', 'mcs']
-    #map_names = ['dust', 'stars']
     NSIDE = 64
-    G_max = 20.5
-    #G_max = 20.0
-    fit_with_mask_mcs = False
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_testing.fits"
-    #fn_prob = f"../data/maps/mapQ_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_op_p0nparams.fits"
-    #fn_prob = f"../data/maps/map_probability_{'_'.join(map_names)}_NSIDE{NSIDE}_G{G_max}_runlong.fits"
-    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}.fits"
+    fit_zeros = False
+    fit_mean = True
     overwrite = True
+
+    if not fit_mean:
+        tag_sel += '_nofitmean'
+    fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+
+    run(fn_gaia, fn_selfunc, NSIDE=NSIDE, map_names=map_names, 
+        x_scale_name=x_scale_name, y_scale_name=y_scale_name, 
+        fit_zeros=fit_zeros, fit_mean=fit_mean, overwrite=overwrite)
+
+
+def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
+        x_scale_name='zeromean', y_scale_name='log', fit_zeros=False, fit_mean=True, overwrite=True):
+
+    if os.path.exists(fn_selfunc) and not overwrite:
+        sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
 
     start = time.time()
 
-    print("Loading data")
-    fn_gaia = f'../data/catalog_G{G_max}.fits' 
-    #fn_gaia = f'../data/gaia_clean.fits' 
+    print("Loading data", flush=True)
     tab_gaia = utils.load_table(fn_gaia)
 
-    print("Making QSO map")
+    print("Making QSO map", flush=True)
     maps_forsel = load_maps(NSIDE, map_names)
     map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
 
-    print("Constructing X and y")
+    print("Constructing X and y", flush=True)
     NPIX = hp.nside2npix(NSIDE)
     X_train_full = construct_X(NPIX, map_names, maps_forsel)
     y_train_full = map_nqso_data
+    # need this because will be inserting small vals where zero
+    y_train_full = y_train_full.astype(float)
+
+    print("Getting indices to fit", flush=True)
+    # should i do this in fitter??
+    if fit_zeros:
+        if y_scale_name=='log':
+            idx_zero = np.abs(y_train_full) < 1e-4
+            print('num zeros:', np.sum(idx_zero))
+            y_train_full[idx_zero] = 0.5       # set zeros to 1/2 a star
+        idx_fit = np.full(len(y_train_full), True)
+        print('min post', np.min(y_train_full), flush=True)
+    else:
+        idx_fit = y_train_full > 0
+
     y_err_train_full = np.sqrt(y_train_full) # assume poission error
 
-    print("Getting indices to fit")
-    # should i do this in fitter??
-    if y_scale_name=='log':
-        idx_fit = y_train_full > 0 #hack
-    else:
-        idx_fit = np.full(len(y_train_full), True)
-
-    if fit_with_mask_mcs:
-        mask_mcs = masks.magellanic_clouds_mask(NSIDE)
-        idx_nomcs = ~mask_mcs #because mask is 1 where masked
-        # i think nomcs is breaking everything! #TODO check
-        idx_fit = idx_fit & idx_nomcs
-
     # FOR TEST
-    #idx_fit[10000:] = False
-
-    print()
+    # print("TEST")
+    # idx_fit[100:] = False
 
     X_train = X_train_full[idx_fit]
     y_train = y_train_full[idx_fit]
     y_err_train = y_err_train_full[idx_fit]
+    print(np.min(y_train))
 
-    print("Training fitter")
-    print("X_train:", X_train.shape, "y_train:", y_train.shape)
-    fitter = FitterGP(X_train, y_train, y_err_train, 
+    print("Training fitter", flush=True)
+    print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
+    fitter = FitterGP(X_train, y_train, y_err_train, fit_mean=fit_mean,
                       x_scale_name=x_scale_name, y_scale_name=y_scale_name)
     fitter.train()
-    print("Predicting")
+    print("Predicting", flush=True)
     y_pred = fitter.predict(X_train)
 
     y_pred_full = np.zeros(y_train_full.shape)
     y_pred_full[idx_fit] = y_pred
 
-    print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full))
+    print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
 
-    print("Making probability map")
+    print("Making probability map", flush=True)
     map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel)
-    hp.write_map(fn_prob, map_prob, overwrite=overwrite)
-    print(f"Saved map to {fn_prob}!")
+    hp.write_map(fn_selfunc, map_prob, overwrite=overwrite)
+    print(f"Saved map to {fn_selfunc}!", flush=True)
 
     end = time.time()
-    print(f"Time: {end-start} s ({(end-start)/60.} min)")
+    print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
 
 
 #hack! better way?
@@ -138,15 +171,8 @@ def f_m10(map_m):
 
 def f_mcs(map_mcs):
     map_mcs = map_mcs.astype(float)
-    #rng = np.random.default_rng(42)
-    #map_mcs += rng.normal(loc=0, scale=0.1, size=len(map_mcs))
-    print(np.min(map_mcs), np.max(map_mcs))
-    #i_zeroorneg = map_mcs < 1.001
-    #map_mcs[i_zeroorneg] = 1.001
     i_zeroorneg = map_mcs < 1e-4
     map_mcs[i_zeroorneg] = 1e-4
-    print(np.min(map_mcs), np.max(map_mcs))
-    print(np.min(np.log(map_mcs)), np.max(np.log(map_mcs)))
     return np.log(map_mcs)
 
 
@@ -155,12 +181,6 @@ def construct_X(NPIX, map_names, maps_forsel):
              'stars': f_stars,
              'm10': f_m10,
              'mcs': f_mcs}
-
-    # constant = np.ones(NPIX)
-    # X_full = np.atleast_2d(constant)
-    # for map_name, map in zip(map_names, maps_forsel):
-    #     X_full = np.vstack((X_full, f_dict[map_name](map)))
-    # return X_full.T
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
     return X.T
 
@@ -193,8 +213,6 @@ class Fitter():
     def scale_X(self, X):
         X_scaled = X.copy()
         if self.x_scale_name=='zeromean':
-            # assumes starts with constant feature! #hack
-            #X_scaled[:,1:] -= np.mean(X_scaled[:,1:], axis=0)
             X_scaled -= np.mean(X_scaled, axis=0)
         return X_scaled
 
@@ -222,20 +240,31 @@ class Fitter():
 
 
 class FitterGP(Fitter):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fit_mean=False, **kwargs):
         super().__init__(*args, **kwargs)
+        print("fit_mean =", fit_mean)
+        self.fit_mean = fit_mean
 
 
     def train(self):
         ndim = self.X_train.shape[1]
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
-        p0 = np.exp(np.full(n_params, 0.1))
-        #p0 = 0.1
+        #log_p0 = np.full(n_params, 0.1)
+        log_p0 = np.array([-0.1, 2, -2, 5]) #based on previous optimizations
+        p0 = np.exp(log_p0)
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
-        self.gp = george.GP(kernel)
+        #print("using hodlr solver")
+        #self.gp = george.GP(kernel, solver=george.HODLRSolver)
+        # Mean 0 terminates successfully more often 
+        #mean = np.mean(self.y_train_scaled)
+        mean = 0.0
+        self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
         print('p init:', self.gp.get_parameter_vector())
+        print(self.X_train_scaled)
+        print(self.y_err_train_scaled)
+
         self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
         print('p compute:', self.gp.get_parameter_vector())
         print('lnlike compute:', self.gp.log_likelihood(self.y_train_scaled))
@@ -249,7 +278,9 @@ class FitterGP(Fitter):
             return -self.gp.grad_log_likelihood(self.y_train_scaled)
 
         print("Minimizing")
-        result = minimize(neg_ln_like, self.gp.get_parameter_vector(), jac=grad_neg_ln_like)
+        result = minimize(neg_ln_like, self.gp.get_parameter_vector(), jac=grad_neg_ln_like, 
+                          #method='Powell'
+                          )
         print(result)
         self.gp.set_parameter_vector(result.x)
         print('p post op:', self.gp.get_parameter_vector())
@@ -264,6 +295,7 @@ class FitterGP(Fitter):
 
 
 if __name__=='__main__':
-    main()
+    #main()
+    parse_args()
 
 

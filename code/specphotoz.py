@@ -22,6 +22,11 @@ import utils
 
 def main():
 
+    #save_tag_model = f'_K{K}_prev_hgboost'
+    #save_tag_model = f'_K{K}_resid'
+    #save_tag_model = f'_scale_wphot'
+    #save_tag_model = f'_scale_wphot_prev_kNN_K27'
+
     #Ks = np.arange(3, 34, 2)
     #Ks = np.arange(35, 50, 2)
     # Ks = [27]
@@ -34,21 +39,37 @@ def main():
 
     #K = 11
     K = 27
-    run(K=K)
-    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_kNN_K{K}_std.fits'
+    redshift_estimator_name = 'kNN'
+    #redshift_estimator_name = 'hgboost'
+    #redshift_estimator_name = 'xgboost'
+    save_tag_model = f'_{redshift_estimator_name}_K{K}_std'
+
+    tag_cat = '_mags-0.05'
+    name_qspec = 'sdss'
+    tag_qspec = ''
+    # name_qspec = 'eboss'
+    # tag_qspec = '_qeboss'
+
+    # Data file names
+    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
+    fn_labeled = f'../data/quasars_{name_qspec}_clean{tag_cat}.fits'
+    
+    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}{tag_cat}{save_tag_model}.fits'
+    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled{tag_qspec}{tag_cat}{save_tag_model}.fits'
+    fn_model = f'../data/redshift_models/model_spz{tag_qspec}{tag_cat}{save_tag_model}.fits'
+
+    run(fn_gaia, fn_labeled, fn_spz, fn_spz_labeled, fn_model, K=K)
     combine_with_gaia_redshifts(fn_spz_labeled)
-    fn_spz = f'../data/redshift_estimates/redshifts_spz_kNN_K{K}_std.fits'
     combine_with_gaia_redshifts(fn_spz)
 
 
-def run(K=27):
+def run(fn_gaia, fn_labeled, fn_spz, fn_spz_labeled, fn_model, 
+        redshift_estimator_name='kNN', K=27):
 
     rng = default_rng()
 
     mode = 'regression'
-    redshift_estimator_name = 'kNN'
-    #redshift_estimator_name = 'hgboost'
-    #redshift_estimator_name = 'xgboost'
+
     #K = 31
     learning_rate = 0.005
     apply_to_all = True
@@ -66,21 +87,6 @@ def run(K=27):
     prev_mode = 'add'
     spz_prev_name = 'redshift_spz_raw'
 
-    save_tag_model = f'_K{K}_std'
-    #save_tag_model = f'_K{K}_prev_hgboost'
-    #save_tag_model = f'_K{K}_resid'
-    #save_tag_model = f'_scale_wphot'
-    #save_tag_model = f'_scale_wphot_prev_kNN_K27'
-
-
-    # Save file names
-    fn_model = f'../data/redshift_models/model_spz_{redshift_estimator_name}{save_tag_model}.fits'
-    fn_spz_labeled = f'../data/redshift_estimates/redshifts_spz_labeled_{redshift_estimator_name}{save_tag_model}.fits'
-    fn_spz = f'../data/redshift_estimates/redshifts_spz_{redshift_estimator_name}{save_tag_model}.fits'
-
-    # Data file names
-    fn_labeled = '../data/quasars_sdss_clean.fits'
-    fn_gaia = '../data/gaia_candidates_clean.fits'
 
     redshift_estimator_dict = {'kNN': RedshiftEstimatorkNN,
                                'hgboost': RedshiftEstimatorHGBoost,
@@ -109,10 +115,10 @@ def run(K=27):
 
     # Construct full feature matrix
     print("Constructing feature matrix")
-    #feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
-    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag',
-                    'phot_bp_mean_mag', 'phot_rp_mean_mag', 'mag_w1_vg', 'mag_w2_vg'
-                    ]
+    feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag']
+    # feature_keys = ['redshift_qsoc', 'ebv', 'g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2', 'phot_g_mean_mag',
+    #                 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'mag_w1_vg', 'mag_w2_vg'
+    #                 ]
     if prev_tag is not None:
         fn_prev_estimate_labeled = f'../data/redshift_estimates/redshifts_spz_labeled{prev_tag}.fits'
         tab_spz_prev_labeled = Table.read(fn_prev_estimate_labeled, format='fits')
@@ -183,7 +189,6 @@ def run(K=27):
     #                X_train, Y_train,
     #                redshift_estimator_kwargs, rng)
 
-    
 
     if mode=='regression':
         if os.path.exists(fn_model) and not overwrite_model:
