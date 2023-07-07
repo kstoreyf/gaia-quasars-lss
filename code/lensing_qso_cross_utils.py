@@ -82,22 +82,28 @@ def compute_master(f_a, f_b, wsp):
     return cl_decoupled
 
 
-def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False,w=None):
+def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False,w=None,beam_k=True,beam_g=True):
     
     nside = hp.npix2nside(len(klr))
-    klm = hp.map2alm(klr,iter=1,pol=False)
     # corrects for pixel window function
-    beam = hp.pixwin(nside,lmax=lmax,pol=False)
+    if beam_k:
+        beam_k = hp.pixwin(nside,lmax=lmax,pol=False)
+    else:
+        beam_k = None
+    if beam_g:
+        beam_g = hp.pixwin(nside,lmax=lmax,pol=False)
+    else:
+        beam_g = None        
     
-    f0 = nmt.NmtField(apodized_mask, [klr],beam=beam) # corrects for pixel window as klr computed from downgrade
+    f0 = nmt.NmtField(apodized_mask, [klr],beam=beam_k) # corrects for pixel window as klr computed from downgrade
     if w is None:
         w = nmt.NmtWorkspace()
         w.compute_coupling_matrix(f0, f0, binning)    
 
-    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam,templates=gsyst)
-    f11 = nmt.NmtField(apodized_mask, [c1],beam=beam,templates=gsyst)
-    f12 = nmt.NmtField(apodized_mask, [c2],beam=beam,templates=gsyst)
-    fjk = nmt.NmtField(apodized_mask, [jk],beam=beam,templates=gsyst)
+    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam_g,templates=gsyst)
+    f11 = nmt.NmtField(apodized_mask, [c1],beam=beam_g,templates=gsyst)
+    f12 = nmt.NmtField(apodized_mask, [c2],beam=beam_g,templates=gsyst)
+    fjk = nmt.NmtField(apodized_mask, [jk],beam=beam_g,templates=gsyst)
     
     clkg = compute_master(f0, f1, w)[0]
     clgg = compute_master(f1, f1, w)[0]
@@ -119,6 +125,7 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
         else:
             return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk
     else:
+        klm = hp.map2alm(klr,iter=1,pol=False)
         cl_gg_th_binned = w.decouple_cell(w.couple_cell([cls_gg_th]))[0]
         cl_kg_th_binned = w.decouple_cell(w.couple_cell([cls_kg_th]))[0]
         cl_kk_th_binned = w.decouple_cell(w.couple_cell([hp.alm2cl(klm)]))[0]    
