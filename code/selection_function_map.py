@@ -1,4 +1,7 @@
+import argparse
 import numpy as np
+import os
+import sys
 import time
 
 from scipy.optimize import minimize
@@ -10,35 +13,56 @@ import masks
 import maps
 
 
+
+def parse_args():
+    parser=argparse.ArgumentParser(description="make selection function map for input catalog")
+    parser.add_argument("catalog_fn", type=str, nargs='?')
+    parser.add_argument("selfunc_fn", type=str, nargs='?', default='selection_function.fits')
+                        #action='store_const', const='selection_function.fits')
+    args=parser.parse_args()
+
+    if args.catalog_fn is None:
+        main()    
+    else:
+        print(f"Running selection function with catalog_fn={args.catalog_fn}, selfunc_fn={args.selfunc_fn}")
+        run(args.catalog_fn, args.selfunc_fn)
+
+
 def main():
     print("starting selection function", flush=True)
 
-    map_names = ['dust', 'stars', 'm10', 'mcs']
-    #map_names = ['dust', 'stars']
-    NSIDE = 64
-    #G_max = 20.5
+    tag_sel = ''
     G_max = 20.0
-    fit_with_mask_mcs = False
+    tag_cat = ''
+    #tag_cat = '_zsplit3bin2'
+    fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
+
+    map_names = ['dust', 'stars', 'm10', 'mcs']
+    NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
     fit_zeros = False
-    set_mean = True
-    tag_sel = ''
-    if set_mean:
-        tag_sel += 'setmean'
-
-    #tag_cat = '_zsplit3bin2'
-    tag_cat = '_qeboss'
-    #fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}_fixzeros_mem350_cpu24_hodlr.fits"
-    fn_prob = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+    fit_mean = True
     overwrite = True
+
+    if not fit_mean:
+        tag_sel += '_nofitmean'
+    fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+
+    run(fn_gaia, fn_selfunc, NSIDE=NSIDE, map_names=map_names, 
+        x_scale_name=x_scale_name, y_scale_name=y_scale_name, 
+        fit_zeros=fit_zeros, fit_mean=fit_mean, overwrite=overwrite)
+
+
+def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
+        x_scale_name='zeromean', y_scale_name='log', fit_zeros=False, fit_mean=True, overwrite=True):
+
+    if os.path.exists(fn_selfunc) and not overwrite:
+        sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
 
     start = time.time()
 
     print("Loading data", flush=True)
-    #fn_gaia = f'../data/catalog_G{G_max}.fits' 
-    fn_gaia = f'../data/QUaia_G{G_max}{tag_cat}.fits' 
-    #fn_gaia = f'../data/gaia_clean.fits' 
     tab_gaia = utils.load_table(fn_gaia)
 
     print("Making QSO map", flush=True)
@@ -64,17 +88,11 @@ def main():
     else:
         idx_fit = y_train_full > 0
 
-    if fit_with_mask_mcs:
-        mask_mcs = masks.magellanic_clouds_mask(NSIDE)
-        idx_nomcs = ~mask_mcs #because mask is 1 where masked
-        # i think nomcs is breaking everything! #TODO check
-        idx_fit = idx_fit & idx_nomcs
-
     y_err_train_full = np.sqrt(y_train_full) # assume poission error
 
     # FOR TEST
-    #print("46k TEST")
-    #idx_fit[46000:] = False
+    # print("TEST")
+    # idx_fit[100:] = False
 
     X_train = X_train_full[idx_fit]
     y_train = y_train_full[idx_fit]
@@ -83,7 +101,7 @@ def main():
 
     print("Training fitter", flush=True)
     print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
-    fitter = FitterGP(X_train, y_train, y_err_train, set_mean=set_mean,
+    fitter = FitterGP(X_train, y_train, y_err_train, fit_mean=fit_mean,
                       x_scale_name=x_scale_name, y_scale_name=y_scale_name)
     fitter.train()
     print("Predicting", flush=True)
@@ -96,8 +114,8 @@ def main():
 
     print("Making probability map", flush=True)
     map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel)
-    hp.write_map(fn_prob, map_prob, overwrite=overwrite)
-    print(f"Saved map to {fn_prob}!", flush=True)
+    hp.write_map(fn_selfunc, map_prob, overwrite=overwrite)
+    print(f"Saved map to {fn_selfunc}!", flush=True)
 
     end = time.time()
     print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
@@ -222,29 +240,27 @@ class Fitter():
 
 
 class FitterGP(Fitter):
-    def __init__(self, *args, set_mean=False, **kwargs):
+    def __init__(self, *args, fit_mean=False, **kwargs):
         super().__init__(*args, **kwargs)
-        print("set_mean =", set_mean)
-        self.set_mean = set_mean
+        print("fit_mean =", fit_mean)
+        self.fit_mean = fit_mean
 
 
     def train(self):
         ndim = self.X_train.shape[1]
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
-        p0 = np.exp(np.full(n_params, 0.1))
+        #log_p0 = np.full(n_params, 0.1)
+        log_p0 = np.array([-0.1, 2, -2, 5]) #based on previous optimizations
+        p0 = np.exp(log_p0)
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
-
-        if self.set_mean:
-            mean = np.mean(self.y_train_scaled)
-            fit_mean = True
-        else:
-            mean = 0.0
-            fit_mean = False
 
         #print("using hodlr solver")
         #self.gp = george.GP(kernel, solver=george.HODLRSolver)
-        self.gp = george.GP(kernel, mean=mean, fit_mean=fit_mean)
+        # Mean 0 terminates successfully more often 
+        #mean = np.mean(self.y_train_scaled)
+        mean = 0.0
+        self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
         print('p init:', self.gp.get_parameter_vector())
         print(self.X_train_scaled)
         print(self.y_err_train_scaled)
@@ -262,7 +278,9 @@ class FitterGP(Fitter):
             return -self.gp.grad_log_likelihood(self.y_train_scaled)
 
         print("Minimizing")
-        result = minimize(neg_ln_like, self.gp.get_parameter_vector(), jac=grad_neg_ln_like)
+        result = minimize(neg_ln_like, self.gp.get_parameter_vector(), jac=grad_neg_ln_like, 
+                          #method='Powell'
+                          )
         print(result)
         self.gp.set_parameter_vector(result.x)
         print('p post op:', self.gp.get_parameter_vector())
@@ -277,6 +295,7 @@ class FitterGP(Fitter):
 
 
 if __name__=='__main__':
-    main()
+    #main()
+    parse_args()
 
 
