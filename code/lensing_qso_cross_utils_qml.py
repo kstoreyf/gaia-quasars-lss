@@ -17,8 +17,10 @@ def prepare_k_data(nside,pr4_alms='',pixwin = None,overwrite=False,lmax=None,rem
         if pixwin is None:
             print("Cut pixwin at lmax")
             fl=np.ones(lmax+1)
-            fl[:3*nside] = hp.pixwin(nside)
-            fl[3*nside-1:]=0.
+            lmax_pixwin = 3*nside if (lmax>=3*nside-1) else lmax+1
+            #print(lmax+1,lmax_pixwin,3*nside-1)
+            fl[:lmax_pixwin] = hp.pixwin(nside,lmax=lmax_pixwin-1)
+            fl[lmax_pixwin:]=0.
             if remove_dipole:
                 print("removing dipole from lensing alms")
                 fl[1]=0.
@@ -44,18 +46,39 @@ def counts_selcorrected(l,b,selection,nside,weight=None):
     return msel
 
 def process_catalog(l,b,selection,nside,nbar_confidence_mask=None,weight=None,verbose=False):
-    msel=counts_selcorrected(l,b,selection,nside,weight)
+    #msel=counts_selcorrected(l,b,selection,nside,weight)
+    #selection_mask = selection>0
+    #if nbar_confidence_mask is None:
+    #    nbar = np.mean(msel[selection_mask]) 
+    #else:
+    #    nbar = np.mean(msel[selection_mask&nbar_confidence_mask]) 
+    #if verbose:
+    #    print("nbar",nbar)
+    #csel = overdensity_from_counts(msel,nbar,verbose=False) 
+
+    msel=counts_selcorrected(l,b,np.ones_like(selection),nside,weight)
     selection_mask = selection>0
     if nbar_confidence_mask is None:
         nbar = np.mean(msel[selection_mask]) 
+        nmean = np.sum(msel[selection_mask])/np.sum(selection[selection_mask])
+        msel=counts_selcorrected(l,b,selection,nside,weight)
+        #print(nmean,nbar,nmean/nbar)        
+        nbar = nmean        
     else:
-        nbar = np.mean(msel[selection_mask&nbar_confidence_mask]) 
+        selection_mask = selection_mask&nbar_confidence_mask
+        #nbar = np.mean(msel[selection_mask])
+        nbar = np.sum(msel[selection_mask])/np.sum(selection[selection_mask])
+    msel=counts_selcorrected(l,b,selection,nside,weight)
     if verbose:
         print("nbar",nbar)
-    csel = overdensity_from_counts(msel,nbar,verbose=False) 
+    #csel = overdensity_from_counts(msel,nbar,verbose=False) 
+    csel = msel/nbar -1
+    csel[~selection_mask]=0.
+
+    
     return csel
 
-def process_catalog_splits(l,b,selection,nside,nbar_confidence_mask=None,nreal=1,weight=None):
+def process_catalog_splits(l,b,selection,nside,nbar_confidence_mask=None,nreal=1,weight=None,verbose=False):
     selection_mask = selection>0
     if nbar_confidence_mask is not None:
         selection_mask=selection_mask&nbar_confidence_mask
@@ -68,8 +91,8 @@ def process_catalog_splits(l,b,selection,nside,nbar_confidence_mask=None,nreal=1
         m1sel = counts_selcorrected((l[split_reshuffle])[0::2],(b[split_reshuffle])[0::2],selection,nside,weight=weight)
         m2sel = counts_selcorrected((l[split_reshuffle])[1::2],(b[split_reshuffle])[1::2],selection,nside,weight=weight)
     
-        c1sel = overdensity_from_counts(m1sel,selection_mask,verbose=False) 
-        c2sel = overdensity_from_counts(m2sel,selection_mask,verbose=False) 
+        c1sel = overdensity_from_counts(m1sel,selection_mask,verbose=verbose) 
+        c2sel = overdensity_from_counts(m2sel,selection_mask,verbose=verbose) 
         jksel =(c2sel-c1sel)/2
         
         data.append([c1sel,c2sel,jksel])
@@ -133,6 +156,7 @@ def generate_correlated_field_from_field(map1,cls1,cls2,clsx,lmax,nside,pixwin=T
 
 def prepare_sysmap(mp, mask):
     # from David's notebook for consistency
+    # there, mask is the QSO mask multiplied by the  selection function
     mean = np.sum(mp*mask)/np.sum(mask)
     mp_out = mp-mean
     mp_out[mask <= 0] = 0
