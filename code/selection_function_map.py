@@ -12,20 +12,33 @@ import utils
 import masks
 import maps
 
+"""
+Run the selection function with the following command on the commandline: 
+python selection_function_map.py <fn_catalog> <fn_selfunc>
 
+<fn_catalog>: the filepath to catalog to fit a selection function to. 
+must be in fits format and have 'ra' and 'dec' columns in degrees
+
+<fn_selfunc> (optional): the filepath to the selection function map that will be saved;
+should have .fits extension. if not given, 'selection_function.fits' will be used
+
+For more control, you can edit the settings in the "run" function call
+within parse_args.
+These settings are: which feature maps to include, the NSIDE, and the 
+scalings of the features and label values (see run() function signature).
+"""
 
 def parse_args():
     parser=argparse.ArgumentParser(description="make selection function map for input catalog")
-    parser.add_argument("catalog_fn", type=str, nargs='?')
-    parser.add_argument("selfunc_fn", type=str, nargs='?', default='selection_function.fits')
-                        #action='store_const', const='selection_function.fits')
+    parser.add_argument("fn_catalog", type=str, nargs='?')
+    parser.add_argument("fn_selfunc", type=str, nargs='?', default='selection_function.fits')
     args=parser.parse_args()
 
-    if args.catalog_fn is None:
+    if args.fn_catalog is None:
         main()    
     else:
-        print(f"Running selection function with catalog_fn={args.catalog_fn}, selfunc_fn={args.selfunc_fn}")
-        run(args.catalog_fn, args.selfunc_fn)
+        print(f"Running selection function with fn_catalog={args.fn_catalog}, fn_selfunc={args.fn_selfunc}")
+        run(args.fn_catalog, args.fn_selfunc)
 
 
 def main():
@@ -55,7 +68,8 @@ def main():
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
-        x_scale_name='zeromean', y_scale_name='log', fit_zeros=False, fit_mean=True, overwrite=True):
+        x_scale_name='zeromean', y_scale_name='log', 
+        fit_zeros=False, fit_mean=True, overwrite=True):
 
     if os.path.exists(fn_selfunc) and not overwrite:
         sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
@@ -77,7 +91,6 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     y_train_full = y_train_full.astype(float)
 
     print("Getting indices to fit", flush=True)
-    # should i do this in fitter??
     if fit_zeros:
         if y_scale_name=='log':
             idx_zero = np.abs(y_train_full) < 1e-4
@@ -90,8 +103,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
 
     y_err_train_full = np.sqrt(y_train_full) # assume poission error
 
-    # FOR TEST
-    # print("TEST")
+    #FOR TESTING PURPOSES ONLY
+    # print("TINY TEST")
     # idx_fit[100:] = False
 
     X_train = X_train_full[idx_fit]
@@ -121,7 +134,6 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
 
 
-#hack! better way?
 def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
     idx_clean = np.full(len(map_expected), True)
     for map_name, map in zip(map_names, maps_forsel):
@@ -250,14 +262,13 @@ class FitterGP(Fitter):
         ndim = self.X_train.shape[1]
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
-        #log_p0 = np.full(n_params, 0.1)
         log_p0 = np.array([-0.1, 2, -2, 5]) #based on previous optimizations
         p0 = np.exp(log_p0)
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
         #print("using hodlr solver")
         #self.gp = george.GP(kernel, solver=george.HODLRSolver)
-        # Mean 0 terminates successfully more often 
+        # Initial mean 0 terminates successfully more often 
         #mean = np.mean(self.y_train_scaled)
         mean = 0.0
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
