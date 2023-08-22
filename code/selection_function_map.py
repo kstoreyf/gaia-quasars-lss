@@ -44,32 +44,46 @@ def parse_args():
 def main():
     print("starting selection function", flush=True)
 
-    tag_sel = ''
+    tag_sel = '_unwise'
     G_max = 20.0
     tag_cat = ''
-    #tag_cat = '_zsplit3bin2'
+    #tag_cat = '_zsplit3bin2'f
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
+    fitter_name = 'GP'
 
-    map_names = ['dust', 'stars', 'm10', 'mcs']
+    #map_names = ['dust', 'stars', 'm10']
+    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise']
     NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
     fit_zeros = False
+    #fit_mean = False
     fit_mean = True
+    downweight_mcs = False
     overwrite = True
 
     if not fit_mean:
         tag_sel += '_nofitmean'
+    if downweight_mcs:
+        tag_sel += '_dwmcs'
+    if fitter_name != 'GP':
+        tag_sel += f'_{fitter_name}'
     fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
 
+    fn_ypred = f"../data/maps/y_pred_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+
     run(fn_gaia, fn_selfunc, NSIDE=NSIDE, map_names=map_names, 
-        x_scale_name=x_scale_name, y_scale_name=y_scale_name, 
-        fit_zeros=fit_zeros, fit_mean=fit_mean, overwrite=overwrite)
+        fitter_name=fitter_name,
+        x_scale_name=x_scale_name, y_scale_name=y_scale_name,
+        fit_zeros=fit_zeros, fit_mean=fit_mean, downweight_mcs=downweight_mcs,
+        fn_ypred=fn_ypred, overwrite=overwrite, 
+        )
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
-        x_scale_name='zeromean', y_scale_name='log', 
-        fit_zeros=False, fit_mean=True, overwrite=True):
+        fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
+        fit_zeros=False, fit_mean=True, downweight_mcs=False,
+        fn_ypred=None, overwrite=True):
 
     if os.path.exists(fn_selfunc) and not overwrite:
         sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
@@ -85,7 +99,7 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
 
     print("Constructing X and y", flush=True)
     NPIX = hp.nside2npix(NSIDE)
-    X_train_full = construct_X(NPIX, map_names, maps_forsel)
+    X_train_full = construct_X(NPIX, map_names, maps_forsel, fitter_name)
     y_train_full = map_nqso_data
     # need this because will be inserting small vals where zero
     y_train_full = y_train_full.astype(float)
@@ -101,27 +115,49 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     else:
         idx_fit = y_train_full > 0
 
+    # poisson: standard dev = sqrt(N) [so var = N]
     y_err_train_full = np.sqrt(y_train_full) # assume poission error
+    print(np.min(y_err_train_full), np.max(y_err_train_full))
+    if downweight_mcs:
+        assert 'mcs' in map_names, "Need MCs map to downweight them [for now!]"
+        idx_mcsmap = map_names.index('mcs')
+        map_mcs = maps_forsel[idx_mcsmap]
+        i_inmcs = map_mcs > 0
+        factor_downweight_mcs = 1000 #magic number! ??
+        y_err_train_full[i_inmcs] *= factor_downweight_mcs
+        print(np.min(y_err_train_full), np.max(y_err_train_full))
 
     #FOR TESTING PURPOSES ONLY
-    # print("TINY TEST")
-    # idx_fit[100:] = False
+    #print("TINY TEST")
+    #idx_fit[100:] = False
+    # print("THIRD TEST")
+    # idx_fit[0::3] = False
+    # idx_fit[1::3] = False
 
     X_train = X_train_full[idx_fit]
     y_train = y_train_full[idx_fit]
     y_err_train = y_err_train_full[idx_fit]
-    print(np.min(y_train))
 
     print("Training fitter", flush=True)
     print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
-    fitter = FitterGP(X_train, y_train, y_err_train, fit_mean=fit_mean,
-                      x_scale_name=x_scale_name, y_scale_name=y_scale_name)
+    print(X_train[3:])
+    fitter_dict = {'linear': FitterLinear,
+                   'GP': FitterGP}
+    fitter_class = fitter_dict[fitter_name]
+    fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
+                      fit_mean=fit_mean,
+                      x_scale_name=x_scale_name, y_scale_name=y_scale_name,
+                      map_names=map_names)
     fitter.train()
     print("Predicting", flush=True)
     y_pred = fitter.predict(X_train)
 
     y_pred_full = np.zeros(y_train_full.shape)
     y_pred_full[idx_fit] = y_pred
+    
+    if fn_ypred is not None:
+        print(f"Saving ypred map to {fn_ypred}")
+        hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite)
 
     print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
 
@@ -161,7 +197,9 @@ def load_maps(NSIDE, map_names):
     map_functions = {'stars': maps.get_star_map,
                      'dust': maps.get_dust_map,
                      'm10': maps.get_m10_map,
-                     'mcs': maps.get_mcs_map}
+                     'mcs': maps.get_mcs_map,
+                     'unwise': maps.get_unwise_map,
+                     }
 
     for map_name in map_names:
         fn_map = f'../data/maps/map_{map_name}_NSIDE{NSIDE}.npy'
@@ -188,18 +226,31 @@ def f_mcs(map_mcs):
     return np.log(map_mcs)
 
 
-def construct_X(NPIX, map_names, maps_forsel):
+def f_unwise(map_u):
+    return np.log(map_u)
+
+
+def construct_X(NPIX, map_names, maps_forsel, fitter_name):
     f_dict = {'dust': f_dust,
              'stars': f_stars,
              'm10': f_m10,
-             'mcs': f_mcs}
+             'mcs': f_mcs,
+             'unwise': f_unwise,
+             }
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
+    print(X.shape)
+    if fitter_name=='linear':
+        ones = np.full((1,X.shape[1]), 1)
+        print(ones.shape)
+        X = np.concatenate((ones, X))
+    print(X.shape)
     return X.T
 
 
 class Fitter():
 
-    def __init__(self, X_train, y_train, y_err_train, x_scale_name=None, y_scale_name=None):
+    def __init__(self, X_train, y_train, y_err_train, fitter_name, 
+                 x_scale_name=None, y_scale_name=None, map_names=None):
         # TODO: add asserts that these are the right shapes
         self.X_train = X_train
         self.y_train = y_train
@@ -208,9 +259,11 @@ class Fitter():
         self.x_scale_name = x_scale_name
         self.y_scale_name = y_scale_name
 
-        self.X_train_scaled = self.scale_X(self.X_train)
+        self.X_train_scaled = self.scale_X(self.X_train, fitter_name)
         self.y_train_scaled = self.scale_y(self.y_train)
         self.y_err_train_scaled = self.scale_y_err(self.y_err_train)
+        self.fitter_name = fitter_name
+        self.map_names = map_names
 
 
     def scale_y_err(self, y_err):
@@ -222,10 +275,14 @@ class Fitter():
             y_err = np.clip(y_err, 1, None)
         return y_err
 
-    def scale_X(self, X):
+    def scale_X(self, X, fitter_name):
         X_scaled = X.copy()
         if self.x_scale_name=='zeromean':
-            X_scaled -= np.mean(X_scaled, axis=0)
+            if fitter_name=='linear':
+                # careful, brittle! assumes first col is ones
+                X_scaled[:,1:] -= np.mean(X_scaled[:,1:], axis=0)
+            else:
+                X_scaled -= np.mean(X_scaled, axis=0)
         return X_scaled
 
 
@@ -250,6 +307,24 @@ class Fitter():
     def predict(self, X_pred):
         pass
 
+# copied from abby williams
+# https://github.com/abbyw24/lss-dipoles/blob/master/sel_func_map_with_dip.py
+# class DipoleModel(Model):
+#         """
+#         BUGS:
+#         - This class will only operate if there's a global variable called NSIDE
+#         and a global variable called PIXEL_INDICES_TO_FIT.
+#         """
+#         parameter_names = ['monopole', 'dipole_x', 'dipole_y', 'dipole_z']
+#         thetas, phis = hp.pix2ang(NSIDE, ipix=PIXEL_INDICES_TO_FIT)
+        
+#         def get_value(self, X):                        
+#             return self.monopole + dipole(DipoleModel.thetas, DipoleModel.phis,
+#                                         self.dipole_x, self.dipole_y, self.dipole_z) # this value has shape (len(PIXEL_INDICES_TO_FIT),)
+        
+#         def set_vector(self, v):
+#             self.monopole, self.dipole_x, self.dipole_y, self.dipole_z = v
+
 
 class FitterGP(Fitter):
     def __init__(self, *args, fit_mean=False, **kwargs):
@@ -262,7 +337,17 @@ class FitterGP(Fitter):
         ndim = self.X_train.shape[1]
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
-        log_p0 = np.array([-0.1, 2, -2, 5]) #based on previous optimizations
+        #based on previous optimizations
+        log_init_guesses = {'dust': -0.1,
+                        'stars': 2,
+                        'm10': -2,
+                        'mcs': 5,
+                        'unwise': 1,
+                        }
+        if self.map_names is not None:
+            log_p0 = np.array([log_init_guesses[map_name] for map_name in self.map_names]) 
+        else:
+            log_p0 = np.full(0.1, n_params)
         p0 = np.exp(log_p0)
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
@@ -273,8 +358,8 @@ class FitterGP(Fitter):
         mean = 0.0
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
         print('p init:', self.gp.get_parameter_vector())
-        print(self.X_train_scaled)
-        print(self.y_err_train_scaled)
+        # print(self.X_train_scaled)
+        # print(self.y_err_train_scaled)
 
         self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
         print('p compute:', self.gp.get_parameter_vector())
@@ -299,9 +384,42 @@ class FitterGP(Fitter):
 
     
     def predict(self, X_pred):
-        X_pred_scaled = self.scale_X(X_pred)
+        X_pred_scaled = self.scale_X(X_pred, self.fitter_name)
         print('predict p:', self.gp.get_parameter_vector())
         y_pred_scaled, _ = self.gp.predict(self.y_train_scaled, X_pred_scaled)
+        return self.unscale_y(y_pred_scaled)
+
+
+
+
+class FitterLinear(Fitter):
+    def __init__(self, *args, fit_mean=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        print("fit_mean =", fit_mean)
+        self.fit_mean = fit_mean
+
+
+    def train(self):
+
+        # ndim = self.X_train.shape[1]
+        # n_params = self.X_train_scaled.shape[1]
+
+        #theta = (X^T Cinv X) (X^T Cinv y)
+        # For now, assume C is the idendity and omit
+        Cinv = np.diag(1./(self.y_err_train_scaled**2))
+        XTCinvX = self.X_train_scaled.T @ Cinv @ self.X_train_scaled
+        XTCinvy = self.X_train_scaled.T @ Cinv @ self.y_train_scaled
+        # XTCinvX = self.X_train_scaled.T @ self.X_train_scaled
+        # XTCinvy = self.X_train_scaled.T @ self.y_train_scaled
+        #self.theta = np.linalg.solve(XTCinvX, XTCinvy)
+        res = np.linalg.lstsq(XTCinvX, XTCinvy, rcond=None)
+        self.theta = res[0]
+        print('theta:', self.theta)
+
+    
+    def predict(self, X_pred):
+        X_pred_scaled = self.scale_X(X_pred, self.fitter_name)
+        y_pred_scaled = X_pred_scaled @ self.theta
         return self.unscale_y(y_pred_scaled)
 
 
