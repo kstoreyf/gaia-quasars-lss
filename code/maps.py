@@ -70,14 +70,14 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
     return map_stars
 
 
-def get_unwise_map(NSIDE=None, fn_map=None, fn_stars='../data/unwise_rand0.01.fits.gz',
+def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01.fits.gz',
                 reverse=True):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"unWISE map already exists, loading from {fn_map}")
         return np.load(fn_map)
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     print(f"Generating new unWISE map ({fn_map})")
-    tab_unwise = utils.load_table(fn_stars)
+    tab_unwise = utils.load_table(fn_unwise)
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_unwise, _ = get_map(NSIDE, tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], 
                                    func_name='count', null_val=0)

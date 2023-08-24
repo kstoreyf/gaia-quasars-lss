@@ -44,19 +44,21 @@ def parse_args():
 def main():
     print("starting selection function", flush=True)
 
-    tag_sel = '_unwise'
+    tag_sel = '_okaypix_noerr'
     G_max = 20.0
     tag_cat = ''
     #tag_cat = '_zsplit3bin2'f
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fitter_name = 'GP'
 
-    #map_names = ['dust', 'stars', 'm10']
-    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise']
+    map_names = ['dust', 'stars', 'm10', 'mcs']
+    #map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise']
     NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    fit_zeros = False
+    pixels_to_fit_mode = 'okay'
+    y_err_mode = 'none'
+
     #fit_mean = False
     fit_mean = True
     downweight_mcs = False
@@ -75,14 +77,16 @@ def main():
     run(fn_gaia, fn_selfunc, NSIDE=NSIDE, map_names=map_names, 
         fitter_name=fitter_name,
         x_scale_name=x_scale_name, y_scale_name=y_scale_name,
-        fit_zeros=fit_zeros, fit_mean=fit_mean, downweight_mcs=downweight_mcs,
+        y_err_mode=y_err_mode,
+        pixels_to_fit_mode=pixels_to_fit_mode, fit_mean=fit_mean, downweight_mcs=downweight_mcs,
         fn_ypred=fn_ypred, overwrite=overwrite, 
         )
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
         fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
-        fit_zeros=False, fit_mean=True, downweight_mcs=False,
+        y_err_mode='poisson',
+        pixels_to_fit_mode='nonzero', fit_mean=True, downweight_mcs=False,
         fn_ypred=None, overwrite=True):
 
     if os.path.exists(fn_selfunc) and not overwrite:
@@ -105,20 +109,32 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     y_train_full = y_train_full.astype(float)
 
     print("Getting indices to fit", flush=True)
-    if fit_zeros:
+    if pixels_to_fit_mode=='all':
         if y_scale_name=='log':
             idx_zero = np.abs(y_train_full) < 1e-4
             print('num zeros:', np.sum(idx_zero))
             y_train_full[idx_zero] = 0.5       # set zeros to 1/2 a star
         idx_fit = np.full(len(y_train_full), True)
         print('min post', np.min(y_train_full), flush=True)
-    else:
+    elif pixels_to_fit_mode=='nonzero' :
         idx_fit = y_train_full > 0
+    elif pixels_to_fit_mode=='okay':
+        idx_fit = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
+    else:
+        raise ValueError(f'mode {pixels_to_fit_mode} not recognized!')
 
     # poisson: standard dev = sqrt(N) [so var = N]
-    y_err_train_full = np.sqrt(y_train_full) # assume poission error
-    print(np.min(y_err_train_full), np.max(y_err_train_full))
+    if y_err_mode=='poisson':
+        y_err_train_full = np.sqrt(y_train_full) # assume poission error
+        print('err min max:', np.min(y_err_train_full), np.max(y_err_train_full))
+    elif y_err_mode=='none':
+        y_err_train_full = None
+    else:
+        raise ValueError(f'mode {y_err_mode} not recognized!')
+
+    
     if downweight_mcs:
+        assert y_err_mode=='poisson', 'For now y err mode needs to be poisson for this'
         assert 'mcs' in map_names, "Need MCs map to downweight them [for now!]"
         idx_mcsmap = map_names.index('mcs')
         map_mcs = maps_forsel[idx_mcsmap]
@@ -136,7 +152,10 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
 
     X_train = X_train_full[idx_fit]
     y_train = y_train_full[idx_fit]
-    y_err_train = y_err_train_full[idx_fit]
+    if y_err_train_full is None:
+        y_err_train = None
+    else:
+        y_err_train = y_err_train_full[idx_fit]
 
     print("Training fitter", flush=True)
     print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
@@ -168,6 +187,33 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
 
     end = time.time()
     print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
+
+
+def get_okay_pixels(map_true, map_names, maps_forsel):
+    okay_dict = {}    
+    i_nonzero = map_true > 0
+    for map_name, map_i in zip(map_names, maps_forsel):
+        if map_name=='abssinb':
+            continue
+        if map_name=='m10':
+            val = np.percentile(map_i[i_nonzero], 20)
+        else:
+            val = np.percentile(map_i[i_nonzero], 80)
+        okay_dict[map_name] = val
+    
+    i_okay = np.full(len(map_true), True)
+    for map_name, map_i in zip(map_names, maps_forsel):        
+        if map_name=='m10':
+            i_map_okay = map_i > okay_dict[map_name]
+        elif map_name in ['dust', 'stars']:
+            i_map_okay = map_i < okay_dict[map_name]
+        else:
+            continue
+        i_okay = i_okay & i_map_okay
+    print(f"{np.sum(i_okay)} of pixels have okay values of all templates!")
+    print(f"That's {np.sum(i_okay)/len(i_okay)} of all pixels")
+    print(f"And {np.sum(i_okay)/np.sum(i_nonzero)} of nonzero pixels")
+    return i_okay
 
 
 def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
@@ -261,7 +307,10 @@ class Fitter():
 
         self.X_train_scaled = self.scale_X(self.X_train, fitter_name)
         self.y_train_scaled = self.scale_y(self.y_train)
-        self.y_err_train_scaled = self.scale_y_err(self.y_err_train)
+        if y_err_train is None:
+            self.y_err_train_scaled = None
+        else:
+            self.y_err_train_scaled = self.scale_y_err(self.y_err_train)
         self.fitter_name = fitter_name
         self.map_names = map_names
 
@@ -358,10 +407,11 @@ class FitterGP(Fitter):
         mean = 0.0
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
         print('p init:', self.gp.get_parameter_vector())
-        # print(self.X_train_scaled)
-        # print(self.y_err_train_scaled)
 
-        self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
+        if self.y_err_train_scaled is None:
+            self.gp.compute(self.X_train_scaled)
+        else:
+            self.gp.compute(self.X_train_scaled, self.y_err_train_scaled)
         print('p compute:', self.gp.get_parameter_vector())
         print('lnlike compute:', self.gp.log_likelihood(self.y_train_scaled))
 
@@ -406,9 +456,13 @@ class FitterLinear(Fitter):
 
         #theta = (X^T Cinv X) (X^T Cinv y)
         # For now, assume C is the idendity and omit
-        Cinv = np.diag(1./(self.y_err_train_scaled**2))
-        XTCinvX = self.X_train_scaled.T @ Cinv @ self.X_train_scaled
-        XTCinvy = self.X_train_scaled.T @ Cinv @ self.y_train_scaled
+        if self.y_err_train_scaled is None:
+            XTCinvX = self.X_train_scaled.T @ self.X_train_scaled
+            XTCinvy = self.X_train_scaled.T @ self.y_train_scaled    
+        else:        
+            Cinv = np.diag(1./(self.y_err_train_scaled**2))
+            XTCinvX = self.X_train_scaled.T @ Cinv @ self.X_train_scaled
+            XTCinvy = self.X_train_scaled.T @ Cinv @ self.y_train_scaled
         # XTCinvX = self.X_train_scaled.T @ self.X_train_scaled
         # XTCinvy = self.X_train_scaled.T @ self.y_train_scaled
         #self.theta = np.linalg.solve(XTCinvX, XTCinvy)
