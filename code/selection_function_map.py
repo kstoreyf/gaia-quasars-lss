@@ -44,20 +44,24 @@ def parse_args():
 def main():
     print("starting selection function", flush=True)
 
-    tag_sel = '_okaypix_noerr'
+    #tag_sel = '_okaypix_noneerr'
+    #tag_sel = '_okaypix_unwisescan'
+    tag_sel = '_unwisescan'
+    #tag_sel = '_okaypix'
     G_max = 20.0
     tag_cat = ''
     #tag_cat = '_zsplit3bin2'f
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fitter_name = 'GP'
 
-    map_names = ['dust', 'stars', 'm10', 'mcs']
+    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan']
     #map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise']
     NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
-    pixels_to_fit_mode = 'okay'
-    y_err_mode = 'none'
+    pixels_to_fit_mode = 'nonzero'
+    #y_err_mode = 'none'
+    y_err_mode = 'poisson'
 
     #fit_mean = False
     fit_mean = True
@@ -119,7 +123,10 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     elif pixels_to_fit_mode=='nonzero' :
         idx_fit = y_train_full > 0
     elif pixels_to_fit_mode=='okay':
-        idx_fit = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
+        i_nonzero = y_train_full > 0
+        i_okay = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
+        idx_fit = i_nonzero & i_okay
+        #idx_fit = i_okay
     else:
         raise ValueError(f'mode {pixels_to_fit_mode} not recognized!')
 
@@ -129,6 +136,7 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
         print('err min max:', np.min(y_err_train_full), np.max(y_err_train_full))
     elif y_err_mode=='none':
         y_err_train_full = None
+        #y_err_train_full = np.ones(y_train_full.size)
     else:
         raise ValueError(f'mode {y_err_mode} not recognized!')
 
@@ -159,6 +167,7 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
 
     print("Training fitter", flush=True)
     print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
+    print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
     print(X_train[3:])
     fitter_dict = {'linear': FitterLinear,
                    'GP': FitterGP}
@@ -169,10 +178,13 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
                       map_names=map_names)
     fitter.train()
     print("Predicting", flush=True)
-    y_pred = fitter.predict(X_train)
+    y_pred_full = fitter.predict(X_train_full)
+    # y_pred = fitter.predict(X_train)
+    # y_pred_full = np.zeros(y_train_full.shape)
+    # y_pred_full[idx_fit] = y_pred
 
-    y_pred_full = np.zeros(y_train_full.shape)
-    y_pred_full[idx_fit] = y_pred
+    # y_pred_notfit = fitter.predict(X_train_full[~idx_fit])
+    # y_pred_full[~idx_fit] = y_pred_notfit
     
     if fn_ypred is not None:
         print(f"Saving ypred map to {fn_ypred}")
@@ -230,10 +242,10 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
         idx_clean = idx_clean & idx_map
     print("Number of clean healpixels:", np.sum(idx_clean), f"(Total: {len(map_expected)})")
     nqso_clean = np.mean(map_true[idx_clean])
-
-    map_prob = map_expected / nqso_clean
-    map_prob[map_prob>1.0] = 1.0
-    assert np.all(map_prob <= 1.0) and np.all(map_prob >= 0.0), "Probabilities must be <=1 and >=0!"
+    nqso_max = nqso_clean + 1*np.std(map_true[idx_clean])
+    map_prob = map_expected / nqso_max
+    #map_prob[map_prob>1.0] = 1.0
+    #assert np.all(map_prob <= 1.0) and np.all(map_prob >= 0.0), "Probabilities must be <=1 and >=0!"
     return map_prob
 
 
@@ -245,6 +257,7 @@ def load_maps(NSIDE, map_names):
                      'm10': maps.get_m10_map,
                      'mcs': maps.get_mcs_map,
                      'unwise': maps.get_unwise_map,
+                     'unwisescan': maps.get_unwise_scan_map,
                      }
 
     for map_name in map_names:
@@ -276,12 +289,17 @@ def f_unwise(map_u):
     return np.log(map_u)
 
 
+def f_unwisescan(map_us):
+    return np.log(map_us)
+
+
 def construct_X(NPIX, map_names, maps_forsel, fitter_name):
     f_dict = {'dust': f_dust,
              'stars': f_stars,
              'm10': f_m10,
              'mcs': f_mcs,
              'unwise': f_unwise,
+             'unwisescan': f_unwisescan,
              }
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
     print(X.shape)
@@ -329,9 +347,9 @@ class Fitter():
         if self.x_scale_name=='zeromean':
             if fitter_name=='linear':
                 # careful, brittle! assumes first col is ones
-                X_scaled[:,1:] -= np.mean(X_scaled[:,1:], axis=0)
+                X_scaled[:,1:] -= np.mean(self.X_train[:,1:], axis=0)
             else:
-                X_scaled -= np.mean(X_scaled, axis=0)
+                X_scaled -= np.mean(self.X_train, axis=0)
         return X_scaled
 
 
@@ -392,6 +410,7 @@ class FitterGP(Fitter):
                         'm10': -2,
                         'mcs': 5,
                         'unwise': 1,
+                        'unwisescan': 1,
                         }
         if self.map_names is not None:
             log_p0 = np.array([log_init_guesses[map_name] for map_name in self.map_names]) 
@@ -408,6 +427,10 @@ class FitterGP(Fitter):
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
         print('p init:', self.gp.get_parameter_vector())
 
+        print('y minmax', np.min(self.y_train_scaled), np.max(self.y_train_scaled))
+        #print('yerr minmax', np.min(self.y_err_train_scaled), np.max(self.y_err_train_scaled))
+        print('yerr:', self.y_err_train, self.y_err_train_scaled)
+
         if self.y_err_train_scaled is None:
             self.gp.compute(self.X_train_scaled)
         else:
@@ -417,10 +440,14 @@ class FitterGP(Fitter):
 
         def neg_ln_like(p):
             self.gp.set_parameter_vector(p)
+            print(p)
+            print('like:', -self.gp.log_likelihood(self.y_train_scaled))
             return -self.gp.log_likelihood(self.y_train_scaled)
 
         def grad_neg_ln_like(p):
             self.gp.set_parameter_vector(p)
+            print(p)
+            print('grad like:', -self.gp.grad_log_likelihood(self.y_train_scaled))
             return -self.gp.grad_log_likelihood(self.y_train_scaled)
 
         print("Minimizing")

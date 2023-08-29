@@ -7,13 +7,14 @@
 ##SBATCH --job-name=make_table_G20.6
 ##SBATCH --job-name=decontaminate_mag0.1_lm5_postpm_qeboss
 ##SBATCH --job-name=sel_func_G20.5_zsplit3bin2
-#SBATCH --job-name=sel_func_G20.0_okaypix_noerr
+##SBATCH --job-name=sel_func_G20.0_okaypix
+#SBATCH --job-name=sel_func_G20.0_unwisescan
 ##SBATCH --job-name=sel_func_G20.0_NSIDE64_fixzeros_mem350_cpu24_hodlr
 ##SBATCH --job-name=animate_gcathi_sdss_cbar_setazim
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=48
-#SBATCH --mem=175GB
+#SBATCH --mem=340GB
 ##SBATCH --mem=2GB
 #SBATCH --time=24:00:00
 

@@ -20,6 +20,9 @@ def main():
 def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
             null_val=0):
     assert func_name in ['count', 'mean'], f"Function {func_name} not recognized!"
+    if func_name=='mean':
+        assert quantity is not None, "If want mean, must pass a quantity to take the mean of!"
+        assert len(quantity)==len(ra), "Quantity should have same size as list of ra/dec"
 
     NPIX = hp.nside2npix(NSIDE)
     if type(ra) == u.Quantity:
@@ -70,7 +73,7 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
     return map_stars
 
 
-def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01.fits.gz',
+def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_nm.fits.gz',
                 reverse=True):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"unWISE map already exists, loading from {fn_map}")
@@ -155,6 +158,22 @@ def get_m10_map(NSIDE, fn_map=None):
         np.save(fn_map, m10_map)
         print(f"Saved m10 map to {fn_map}")
     return m10_map
+
+
+def get_unwise_scan_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_nm.fits.gz'):
+    if fn_map is not None and os.path.exists(fn_map):
+        print(f"unWISE scan map already exists, loading from {fn_map}")
+        return np.load(fn_map)
+    assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
+    print(f"Generating new unWISE scan map ({fn_map})")
+    tab_unwise = utils.load_table(fn_unwise)
+    # use nmW1 here, very similar to nmW2
+    map_unwise_scan, _ = get_map(NSIDE, tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], 
+                                   func_name='mean', quantity=tab_unwise['nmW1'], null_val=0)
+    if fn_map is not None:
+        np.save(fn_map, map_unwise_scan)
+        print(f"Saved unWISE scan map to {fn_map}")
+    return map_unwise_scan
 
 
 ### Dust map functions
