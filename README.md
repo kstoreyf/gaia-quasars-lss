@@ -6,10 +6,11 @@ The associated paper can be found at https://arxiv.org/abs/2306.17749. The data 
 
 Our analysis of the cross-correlation of Quaia with CMB lensing can be found at https://arxiv.org/abs/2306.17748. The data products relevant to this analysis are hosted at https://doi.org/10.5281/zenodo.8098635.
 
-The main relevant scripts for the Quaia paper are:
+The main relevant scripts for the Quaia paper are (to be run in this order):
 - [make_data_tables.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/make_data_tables.py): Constructs the necessary data tables of quasars and other sources.
 - [decontaminate.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/decontaminate.py): Learns optimal cuts and decontaminates the sample.
 - [specphotoz.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/specphotoz.py): Estimates spectrophotometric redshifts for the Quaia sources.
+- [make_catalogs.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/make_catalogs.py): Compiles the final catalogs, with redshift info and magnitude cuts (both the working versions and the public-facing versions).
 - [selection_function_map.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/selection_function_map.py): Constructs the selection function based on the catalog and feature templates.
 - [generate_random.py](https://github.com/kstoreyf/gaia-quasars-lss/blob/main/code/generate_random.py): Generates a random catalog based on an input selection function.
 
