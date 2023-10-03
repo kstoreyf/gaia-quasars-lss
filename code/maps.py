@@ -178,22 +178,7 @@ def get_unwise_scan_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0
 
 ### Dust map functions
 
-# only do this the first time!
-fetch_map = False
-def fetch_dustmap(map_name='sfd', data_dir='../data/dustmaps'):
-    map_dict = {'sfd': dustmaps.sfd}
-    if map_name not in map_dict:
-        raise ValueError(f"Map name {map_name} not recognized!")
-    from dustmaps.config import config
-    config['data_dir'] = data_dir
-
-    import dustmaps
-    import dustmaps.sfd
-    map_dict[map_name].fetch()
-
-
-
-def get_dust_map(NSIDE=None, R=3.1, fn_map=None):
+def get_dust_map(NSIDE=None, R=3.1, map_name='csfd', fn_map=None):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"Dustmap already exists, loading from {fn_map}")
         return np.load(fn_map)
@@ -205,7 +190,7 @@ def get_dust_map(NSIDE=None, R=3.1, fn_map=None):
     # get the positions and Av values at the center of a high-NSIDE map
     print("NPIX for dust map sampling:", NPIX_high)
     ra_high, dec_high = hp.pix2ang(NSIDE_high, np.arange(NPIX_high), lonlat=True)
-    av_high = utils.get_extinction(ra_high*u.deg, dec_high*u.deg, R=R)
+    av_high = utils.get_extinction(ra_high*u.deg, dec_high*u.deg, R=R, map_name=map_name)
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_avmean, _ = get_map(NSIDE, ra_high, dec_high, quantity=av_high, 
                                          func_name='mean', null_val=np.nan)

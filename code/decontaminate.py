@@ -13,7 +13,8 @@ import utils
 def main():
     tag_decontam = '_mag0.1_lm5_postpm'
     
-    tag_cat = '_mags-0.05'
+    tag_cat = ''
+    #tag_cat = '_mags-0.05'
     name_qspec = 'sdss'
     tag_qspec = ''
     # name_qspec = 'eboss'

@@ -32,11 +32,8 @@ def main():
     overwrite = True
 
     ### Make main datasets
-    #gaia_candidates_plus_info(overwrite=overwrite)
-    #gaia_candidates_superset(overwrite=overwrite)
-    ###gaia_candidates_clean(overwrite=overwrite)
-
-    #gaia_slim(overwrite=overwrite)
+    gaia_candidates_plus_info(overwrite=overwrite)
+    gaia_candidates_superset(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
     #eboss_slim(overwrite=overwrite)
     #gaia_purer_sourceids(overwrite=overwrite)
@@ -56,36 +53,9 @@ def main():
     #remove_duplicate_sources(overwrite=overwrite)
     #make_labeled_table(overwrite=overwrite)
     
+    ### Other functions
     #get_gaia_xsdssfootprint(overwrite=overwrite)
-
-    #gaia_unwise_slim(overwrite=overwrite)
-    #gaia_catwise_slim(overwrite=overwrite)
-
-    #gaia_slim_xsdss(overwrite=overwrite)
-    #gaia_clean(overwrite=overwrite)
-
     #perturbed_magnitude_catalogs(mag_perturb=-0.05, overwrite=overwrite)
-
-    tag_qspec = ''
-    #tag_cat = '_mags-0.05'
-    tag_cat = ''
-    G_maxs = [20.0, 20.5]
-    #G_maxs = [20.6]
-    for G_max in G_maxs:
-        #merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
-        make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
-
-    G_max = 20.5
-    n_zbins = 2
-    make_redshift_split_catalogs(G_max, n_zbins)
-
-    # save as csv
-    # fn_gaia_slim = '../data/gaia_slim.fits'
-    # tab_gaia = utils.load_table(fn_gaia_slim)
-    # fn_csv = '../data/gaia_candidates.csv'
-    # save_as_csv(tab_gaia, ['source_id', 'ra', 'dec'], fn_csv, overwrite=overwrite)
-
-
 
 
 def gaia_purer_sourceids(overwrite=False):
@@ -157,94 +127,6 @@ def eboss_slim(overwrite=False):
 
 
 
-def merge_gaia_spzs_and_cutGmax(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
-
-    # save name
-    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}{tag_cat}.fits'
-
-    # data paths
-    fn_gaia = f'../data/gaia_candidates_clean{tag_qspec}{tag_cat}.fits'
-    fn_spz = f'../data/redshift_estimates/redshifts_spz{tag_qspec}{tag_cat}_kNN_K27_std.fits'
-
-    # load data, cut to G_max
-    tab_gaia = utils.load_table(fn_gaia)
-    tab_gaia = tab_gaia[tab_gaia['phot_g_mean_mag'] < G_max]
-
-    # SPZ-only table
-    tab_spz = utils.load_table(fn_spz)
-    tab_spz.keep_columns(['source_id', 'redshift_spz', 'redshift_spz_raw', 'redshift_spz_err'])
-
-    tab_gcat = join(tab_gaia, tab_spz, keys='source_id', join_type='inner')
-    utils.add_randints_column(tab_gcat)
-    tab_gcat.write(fn_gcat, overwrite=overwrite)
-    print(f"Wrote table with {len(tab_gcat)} objects to {fn_gcat}")
-
-
-
-def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
-
-    # working catalog
-    fn_gcat = f'../data/catalog_G{G_max}{tag_qspec}{tag_cat}.fits'
-    # update to final name choice!
-    fn_public = f'../data/quaia_G{G_max}{tag_qspec}{tag_cat}.fits'
-
-    tab_gcat = utils.load_table(fn_gcat)
-
-    columns_to_keep = ['source_id', 'unwise_objid', 
-                       'redshift_spz', 'redshift_spz_err', 
-                       'ra', 'dec', 'l', 'b', 
-                       'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 
-                       'mag_w1_vg', 'mag_w2_vg', 
-                       'pm', 'pmra', 'pmdec', 'pmra_error', 'pmdec_error']
-
-    tab_public = Table()
-    tab_public.meta = {'name': '\emph{{Gaia}}--\emph{{unWISE}} Quasar Catalog',
-                       'abbrv': 'Quaia'
-                       }
-
-    rename_dict = {'redshift_spz': 'redshift_quaia',
-                   'redshift_spz_err': 'redshift_quaia_err'
-                   }
-
-    for cn in columns_to_keep:
-        if cn in rename_dict:
-            cn_new = rename_dict[cn]
-        else: 
-            cn_new = cn
-        tab_public[cn_new] = tab_gcat[cn]
-        tab_public[cn_new].info.unit = utils.label2unit_dict[cn_new]
-        tab_public[cn_new].info.description = utils.label2description_dict[cn_new]
-    
-    # for tc in tab_public.columns:
-    #     print(tc, tab_public[tc].info.unit)
-    print(tab_public.columns)
-    tab_public.write(fn_public, overwrite=overwrite)
-    print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
-
-
-def make_redshift_split_catalogs(G_max, n_zbins, overwrite=True):
-
-    fn_gcat = f'../data/quaia_G{G_max}.fits'
-    tab_gcat = utils.load_table(fn_gcat)
-    z_percentiles = np.linspace(0.0, 100.0, n_zbins+1)
-    print(z_percentiles)
-    z_bins = np.percentile(list(tab_gcat['redshift_quaia']), z_percentiles)
-    z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
-    z_bins[0] -= 0.01 # add a bit to minimum bin to make sure the lowest-z source gets included
-    print("zbins:", z_bins)
-
-    for bb in range(n_zbins):
-        i_zbin = (tab_gcat['redshift_quaia'] >= z_bins[bb]) & (tab_gcat['redshift_quaia'] < z_bins[bb+1])
-        tab_gcat_zbin = tab_gcat[i_zbin]
-        fn_gcat_zbin = f'../data/quaia_G{G_max}_zsplit{n_zbins}bin{bb}.fits'
-        tab_gcat_zbin.write(fn_gcat_zbin, overwrite=overwrite)
-        print("zmin:", np.min(tab_gcat_zbin['redshift_quaia']))
-        print("zmax:", np.max(tab_gcat_zbin['redshift_quaia']))
-        print(f"Wrote table with {len(tab_gcat_zbin)} objects to {fn_gcat_zbin}")
-
-
-
-
 def gaia_candidates_plus_info(overwrite=False):
 
     # save to:
@@ -258,9 +140,7 @@ def gaia_candidates_plus_info(overwrite=False):
     print(f"Gaia candidates: N={len(tab_gaia)}")
 
     utils.add_ebv(tab_gaia)
-    Rv = 3.1
-    Av = Rv*tab_gaia['ebv']
-    tab_gaia.add_column(Av, name='A_v')
+    utils.add_extinction(tab_gaia)
 
     pm = np.sqrt(tab_gaia['pmra']**2 + tab_gaia['pmdec']**2)
     tab_gaia.add_column(pm, name='pm')
@@ -415,7 +295,6 @@ def cuts_quasars_sdss(tab_sdss):
     # NOTE that we already did zwarning cut in Gaia cross-match, 
     # so don't need to here (didn't save zwarning)
 
-    
     # Clean out super low redshift SDSS objects, and ones with bad redshifts
     z_min = 0.01 #magic #hyperparameter
     redshift_key = 'z_sdss'
@@ -447,8 +326,7 @@ def cuts_quasars_eboss(tab_eboss):
 
     i_eboss = i_clust & i_zgood & i_zwarning0
     return i_eboss
-
-
+    
 
 # galaxies via sdss skyserver CAS, 
 # https://skyserver.sdss.org/CasJobs/jobdetails.aspx?id=59558048&message=Details%20of%2059558048
@@ -728,35 +606,6 @@ def perturbed_magnitude_catalogs(mag_perturb=0.05, overwrite=False):
         fn_save = fn.split('.fits')[0] + tag_cat + '.fits'
         tab.write(fn_save, overwrite=overwrite)
         print(f"Wrote table with {len(tab)} objects to {fn_save}")
-
-
-def save_slim_table(tab, columns_to_keep, fn_save, overwrite=False, 
-                    w1_name='mag_w1_vg', w2_name='mag_w2_vg'):
-    gaia_wise_colors = ['g_rp', 'bp_g', 'bp_rp', 'g_w1', 'w1_w2']
-    if np.any(np.in1d(gaia_wise_colors, columns_to_keep)):
-        utils.add_gaia_wise_colors(tab, w1_name=w1_name, w2_name=w2_name)
-    if 'ebv' in columns_to_keep or 'A_v' in columns_to_keep:
-        utils.add_ebv(tab)
-    if 'A_v' in columns_to_keep:
-        Rv = 3.1
-        Av = Rv*tab['ebv']
-        tab.add_column(Av, name='A_v')
-    if 'pm' in columns_to_keep:
-        pm = np.sqrt(tab['pmra']**2 + tab['pmdec']**2)
-        tab.add_column(pm, name='pm')
-    tab.keep_columns(columns_to_keep)
-    tab.write(fn_save, overwrite=overwrite)
-    print(f"Wrote table with {len(tab)} objects to {fn_save}")
-    return tab
-
-
-
-def save_as_csv(tab, column_names, fn_csv, overwrite=False):
-    tab = tab.copy()
-    tab.keep_columns(column_names)
-    tab.write(fn_csv, format='csv', overwrite=overwrite)  
-    print(f"Saved table as CSV to {fn_csv}!")
-
 
 
 if __name__=='__main__':

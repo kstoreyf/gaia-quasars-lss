@@ -7,6 +7,7 @@ from astropy import units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky, search_around_sky
 from dustmaps.sfd import SFDQuery
+from dustmaps.csfd import CSFDQuery
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -163,21 +164,53 @@ def groupby(values, group_indices):
 
 ### Extinction
 
-def add_ebv(tab):
-    ebv = get_ebv(tab['ra'], tab['dec'])
+def fetch_dustmap(map_name='csfd', data_dir='../data/dustmaps'):
+    # if already exists, don't need to fetch
+    if os.path.exists(f'{data_dir}/{map_name}'):
+        return
+    import dustmaps
+    import dustmaps.sfd, dustmaps.csfd
+    map_dict = {'sfd': dustmaps.sfd, 
+                'csfd': dustmaps.csfd}
+    if map_name not in map_dict:
+        raise ValueError(f"Map name {map_name} not recognized!")
+    from dustmaps.config import config
+    config['data_dir'] = data_dir
+
+    map_dict[map_name].fetch()
+
+
+def get_ebv(ra, dec, map_name='csfd'):
+    assert map_name in ['sfd', 'csfd'], "Map name not recognized!"
+    fetch_dustmap(map_name=map_name) #will only fetch if not already fetched
+    if map_name=='sfd':
+        sfd = SFDQuery()
+    elif map_name=='csfd':
+        sfd = CSFDQuery()
+    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
+    ebv_orig = sfd(coords)
+    # rescaling correction described in https://arxiv.org/pdf/1009.4933.pdf
+    # the rescaling factor is not included in CSFD either (see sec A1 of https://arxiv.org/pdf/2306.03926.pdf)
+    ebv_rescaled = 0.86*ebv_orig
+    return ebv_rescaled
+
+
+def add_ebv(tab, map_name='csfd'):
+    ebv = get_ebv(tab['ra'], tab['dec'], map_name=map_name)
     tab.add_column(ebv, name='ebv')
 
 
-def get_ebv(ra, dec):
-    sfd = SFDQuery()
-    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
-    ebv = sfd(coords)
-    return ebv
-
-
-def get_extinction(ra, dec, R=3.1):
-    ebv = get_ebv(ra, dec)
+def get_extinction(ra, dec, R=3.1, map_name='csfd'):
+    ebv = get_ebv(ra, dec, map_name=map_name)
     return R*ebv
+
+
+def add_extinction(tab, R=3.1, map_name='csfd'):
+    if 'ebv' in tab.columns:
+        A_v = R*tab['ebv']
+    else:
+        A_v = get_extinction(tab['ra'], tab['dec'], R=R, map_name=map_name)
+    tab.add_column(A_v, name='A_v')
 
 
 ### Coordinates
