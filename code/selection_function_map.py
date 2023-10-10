@@ -44,9 +44,10 @@ def parse_args():
 def main():
     print("starting selection function", flush=True)
 
+    tag_sel = ''
     #tag_sel = '_okaypix_noneerr'
     #tag_sel = '_okaypix_unwisescan'
-    tag_sel = '_unwisescan'
+    #tag_sel = '_unwisescan'
     #tag_sel = '_okaypix'
     G_max = 20.0
     tag_cat = ''
@@ -65,38 +66,67 @@ def main():
 
     #fit_mean = False
     fit_mean = True
-    downweight_mcs = False
-    overwrite = True
+    overwrite = False
 
     if not fit_mean:
         tag_sel += '_nofitmean'
-    if downweight_mcs:
-        tag_sel += '_dwmcs'
     if fitter_name != 'GP':
         tag_sel += f'_{fitter_name}'
     fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
-
-    fn_ypred = f"../data/maps/y_pred_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
 
     run(fn_gaia, fn_selfunc, NSIDE=NSIDE, map_names=map_names, 
         fitter_name=fitter_name,
         x_scale_name=x_scale_name, y_scale_name=y_scale_name,
         y_err_mode=y_err_mode,
-        pixels_to_fit_mode=pixels_to_fit_mode, fit_mean=fit_mean, downweight_mcs=downweight_mcs,
-        fn_ypred=fn_ypred, overwrite=overwrite, 
+        pixels_to_fit_mode=pixels_to_fit_mode, fit_mean=fit_mean,
+        overwrite=overwrite, 
         )
 
 
-def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs'], 
+def recompute_ypred_to_selfunc():
+
+    print("Recomputing selection function probability map from y_pred")
+    G_max = 20.5
+    tag_cat = '_zsplit2bin1'
+    tag_sel = ''
+    NSIDE = 64
+
+    overwrite = True
+
+    fn_ypred = f"../data/maps/y_pred_selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+    fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
+    fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
+
+    y_pred_full = hp.read_map(fn_ypred)
+
+    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan']
+    maps_forsel = load_maps(NSIDE, map_names)
+
+    print("Loading data", flush=True)
+    tab_gaia = utils.load_table(fn_gaia)
+
+    print("Making QSO map", flush=True)
+    maps_forsel = load_maps(NSIDE, map_names)
+    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+
+    print("Making probability map", flush=True)
+    map_prob = map_expected_to_probability(y_pred_full, map_nqso_data, map_names, maps_forsel)
+    hp.write_map(fn_selfunc, map_prob, overwrite=overwrite)
+    print(f"Saved map to {fn_selfunc}!", flush=True)
+
+
+def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan'], 
         fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson',
-        pixels_to_fit_mode='nonzero', fit_mean=True, downweight_mcs=False,
-        fn_ypred=None, overwrite=True):
+        pixels_to_fit_mode='nonzero', fit_mean=True,
+        overwrite=False):
 
     if os.path.exists(fn_selfunc) and not overwrite:
         sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
 
     start = time.time()
+
+    fn_ypred = f'{os.path.dirname(fn_selfunc)}/y_pred_{os.path.basename(fn_selfunc)}'
 
     print("Loading data", flush=True)
     tab_gaia = utils.load_table(fn_gaia)
@@ -112,6 +142,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     # need this because will be inserting small vals where zero
     y_train_full = y_train_full.astype(float)
 
+    i_nonzero = y_train_full > 0
+
     print("Getting indices to fit", flush=True)
     if pixels_to_fit_mode=='all':
         if y_scale_name=='log':
@@ -121,9 +153,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
         idx_fit = np.full(len(y_train_full), True)
         print('min post', np.min(y_train_full), flush=True)
     elif pixels_to_fit_mode=='nonzero' :
-        idx_fit = y_train_full > 0
+        idx_fit = i_nonzero
     elif pixels_to_fit_mode=='okay':
-        i_nonzero = y_train_full > 0
         i_okay = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
         idx_fit = i_nonzero & i_okay
         #idx_fit = i_okay
@@ -140,20 +171,10 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
     else:
         raise ValueError(f'mode {y_err_mode} not recognized!')
 
-    
-    if downweight_mcs:
-        assert y_err_mode=='poisson', 'For now y err mode needs to be poisson for this'
-        assert 'mcs' in map_names, "Need MCs map to downweight them [for now!]"
-        idx_mcsmap = map_names.index('mcs')
-        map_mcs = maps_forsel[idx_mcsmap]
-        i_inmcs = map_mcs > 0
-        factor_downweight_mcs = 1000 #magic number! ??
-        y_err_train_full[i_inmcs] *= factor_downweight_mcs
-        print(np.min(y_err_train_full), np.max(y_err_train_full))
 
     #FOR TESTING PURPOSES ONLY
-    #print("TINY TEST")
-    #idx_fit[100:] = False
+    # print("TINY TEST")
+    # idx_fit[100:] = False
     # print("THIRD TEST")
     # idx_fit[0::3] = False
     # idx_fit[1::3] = False
@@ -178,17 +199,18 @@ def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs']
                       map_names=map_names)
     fitter.train()
     print("Predicting", flush=True)
-    y_pred_full = fitter.predict(X_train_full)
-    # y_pred = fitter.predict(X_train)
-    # y_pred_full = np.zeros(y_train_full.shape)
-    # y_pred_full[idx_fit] = y_pred
+    # only predict values in nonzero pixels; if was zero, keep at zero
+    # no training data there so don't trust predictions
+    X_train_nonzero = X_train_full[i_nonzero]
+    y_pred_nonzero = fitter.predict(X_train_nonzero)
+    y_pred_full = np.zeros(y_train_full.shape)
+    y_pred_full[i_nonzero] = y_pred_nonzero
 
     # y_pred_notfit = fitter.predict(X_train_full[~idx_fit])
     # y_pred_full[~idx_fit] = y_pred_notfit
     
-    if fn_ypred is not None:
-        print(f"Saving ypred map to {fn_ypred}")
-        hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite)
+    print(f"Saving ypred map to {fn_ypred}")
+    hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite)
 
     print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
 
@@ -242,10 +264,12 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
         idx_clean = idx_clean & idx_map
     print("Number of clean healpixels:", np.sum(idx_clean), f"(Total: {len(map_expected)})")
     nqso_clean = np.mean(map_true[idx_clean])
-    nqso_max = nqso_clean + 1*np.std(map_true[idx_clean])
+    # 2 standard deviations above should mean that most, if not all, values are below 1
+    nqso_max = nqso_clean + 2*np.std(map_true[idx_clean])
     map_prob = map_expected / nqso_max
     #map_prob[map_prob>1.0] = 1.0
     #assert np.all(map_prob <= 1.0) and np.all(map_prob >= 0.0), "Probabilities must be <=1 and >=0!"
+    print(f"min: {np.min(map_prob)}, max: {np.max(map_prob)}")
     return map_prob
 
 
@@ -419,13 +443,20 @@ class FitterGP(Fitter):
         p0 = np.exp(log_p0)
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
-        #print("using hodlr solver")
-        #self.gp = george.GP(kernel, solver=george.HODLRSolver)
-        # Initial mean 0 terminates successfully more often 
+        # this will add a free parameter to scale the overall amplitude, which has units of variance
+        # (initially had forgotten this!)
+        amp = np.var(self.y_train_scaled)
+        kernel *= amp
+        
+        # Using an initial guess of mean=0 terminates successfully more often,
+        # than using the mean of the labels
         #mean = np.mean(self.y_train_scaled)
         mean = 0.0
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
-        print('p init:', self.gp.get_parameter_vector())
+        #print("using hodlr solver")
+        #self.gp = george.GP(kernel, solver=george.HODLRSolver)
+        print('parameter names:', self.gp.get_parameter_names())
+        print('paramters init:', self.gp.get_parameter_vector())
 
         print('y minmax', np.min(self.y_train_scaled), np.max(self.y_train_scaled))
         #print('yerr minmax', np.min(self.y_err_train_scaled), np.max(self.y_err_train_scaled))
@@ -506,6 +537,7 @@ class FitterLinear(Fitter):
 
 if __name__=='__main__':
     #main()
-    parse_args()
+    #parse_args()
+    recompute_ypred_to_selfunc()
 
 

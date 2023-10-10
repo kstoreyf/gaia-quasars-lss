@@ -52,7 +52,7 @@ def parse_args():
 
 def main():
 
-    G_max = 20.5
+    G_max = 20.0
     #tag_cat = '_qeboss'
     tag_cat = ''
     tag_sel = ''
@@ -66,7 +66,7 @@ def main():
     fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x.fits'
     overwrite = True
 
-    run(fn_selfunc, fn_rand, NSIDE_map, fn_catalog=fn_gaia,
+    run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_gaia,
         fac_rand=fac_rand, overwrite=overwrite)
 
 
@@ -127,5 +127,5 @@ def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc):
 
 
 if __name__=='__main__':
-    #main()
-    parse_args()
+    main()
+    #parse_args()
