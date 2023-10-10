@@ -45,13 +45,8 @@ def main():
     print("starting selection function", flush=True)
 
     tag_sel = ''
-    #tag_sel = '_okaypix_noneerr'
-    #tag_sel = '_okaypix_unwisescan'
-    #tag_sel = '_unwisescan'
-    #tag_sel = '_okaypix'
     G_max = 20.0
     tag_cat = ''
-    #tag_cat = '_zsplit3bin2'f
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fitter_name = 'GP'
 
@@ -83,6 +78,7 @@ def main():
         )
 
 
+# for when you want to change the conversion from predicted y map to the selection function probability values! careful, may overwrite
 def recompute_ypred_to_selfunc():
 
     print("Recomputing selection function probability map from y_pred")
@@ -267,6 +263,7 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
     # 2 standard deviations above should mean that most, if not all, values are below 1
     nqso_max = nqso_clean + 2*np.std(map_true[idx_clean])
     map_prob = map_expected / nqso_max
+    # it's alright if vals go above 1, it's just a rescaling, but with 2*std none of our fiducial catalogs have >1 vals
     #map_prob[map_prob>1.0] = 1.0
     #assert np.all(map_prob <= 1.0) and np.all(map_prob >= 0.0), "Probabilities must be <=1 and >=0!"
     print(f"min: {np.min(map_prob)}, max: {np.max(map_prob)}")
@@ -537,7 +534,7 @@ class FitterLinear(Fitter):
 
 if __name__=='__main__':
     #main()
-    #parse_args()
-    recompute_ypred_to_selfunc()
+    parse_args()
+    #recompute_ypred_to_selfunc()
 
 
