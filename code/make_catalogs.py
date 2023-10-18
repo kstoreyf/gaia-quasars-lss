@@ -25,10 +25,17 @@ def main():
     # for G_max in G_maxs:
     #     make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
-    ### Make redshift-split catalogs
+    # ### Make redshift-split catalogs
+    # G_max = 20.5
+    # n_zbins = 2
+    # make_redshift_split_catalogs(G_max, n_zbins)
+
+    ### Make redshift-split catalogs for CIB analysis by Giulia
     G_max = 20.5
-    n_zbins = 2
-    make_redshift_split_catalogs(G_max, n_zbins)
+    z_bins = [0, 1.0, 2.3, 5]
+    make_redshift_split_catalogs(G_max, z_bins=z_bins, save_tag='CIB')
+    z_bins = [0,  0.5, 1.0, 1.5, 2.0, 2.5, 5]
+    make_redshift_split_catalogs(G_max, z_bins=z_bins, save_tag='CIB')
 
 
 def merge_gaia_spzs_and_cutGmax(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
@@ -96,21 +103,32 @@ def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
     print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
 
 
-def make_redshift_split_catalogs(G_max, n_zbins, overwrite=True):
+def make_redshift_split_catalogs(G_max, n_zbins=None, z_bins=None, overwrite=True,
+                                 save_tag=''):
+
+    assert n_zbins is not None or z_bins is not None, "Either n_zbins or z_bins must be passed!"
+
+    if z_bins is not None and n_zbins is not None:
+        print("z_bins passed, ignoring n_zbins")
 
     fn_gcat = f'../data/quaia_G{G_max}.fits'
     tab_gcat = utils.load_table(fn_gcat)
-    z_percentiles = np.linspace(0.0, 100.0, n_zbins+1)
-    print(z_percentiles)
-    z_bins = np.percentile(list(tab_gcat['redshift_quaia']), z_percentiles)
-    z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
-    z_bins[0] -= 0.01 # add a bit to minimum bin to make sure the lowest-z source gets included
+
+    if z_bins is None:
+        z_percentiles = np.linspace(0.0, 100.0, n_zbins+1)
+        print(z_percentiles)
+        z_bins = np.percentile(list(tab_gcat['redshift_quaia']), z_percentiles)
+        z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
+        z_bins[0] -= 0.01 # add a bit to minimum bin to make sure the lowest-z source gets included
+
+    n_zbins = len(z_bins)-1
     print("zbins:", z_bins)
+    print("n_zbins:", n_zbins)
 
     for bb in range(n_zbins):
         i_zbin = (tab_gcat['redshift_quaia'] >= z_bins[bb]) & (tab_gcat['redshift_quaia'] < z_bins[bb+1])
         tab_gcat_zbin = tab_gcat[i_zbin]
-        fn_gcat_zbin = f'../data/quaia_G{G_max}_zsplit{n_zbins}bin{bb}.fits'
+        fn_gcat_zbin = f'../data/quaia_G{G_max}_zsplit{n_zbins}bin{bb}{save_tag}.fits'
         tab_gcat_zbin.write(fn_gcat_zbin, overwrite=overwrite)
         print("zmin:", np.min(tab_gcat_zbin['redshift_quaia']))
         print("zmax:", np.max(tab_gcat_zbin['redshift_quaia']))

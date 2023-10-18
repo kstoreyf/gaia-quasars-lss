@@ -29,13 +29,14 @@ exec --overlay $overlay_ext3:ro \
 /bin/bash; \
 cd /home/ksf293/gaia-quasars-lss/code; \
 conda activate gaiaenv; \
+python selection_function_map.py ../data/quaia_G20.5_zsplit3bin0.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit3bin0.fits;
 #python animate.py;
 #python specphotoz.py;
 #python make_data_tables.py;
 #python lensing_qso_cross.py;
 #python correlations.py;
 #python decontaminate.py;
-python selection_function_map.py ../data/quaia_G20.5_zsplit2bin1.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit2bin1.fits;
+#python selection_function_map.py ../data/quaia_G20.5_zsplit2bin1.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit2bin1.fits;
 #python selection_function_map.py ../data/quaia_G20.5.fits ../data/maps/selection_function_NSIDE64_G20.5.fits;
 #python generate_random.py;
 #python selection_function_map.py

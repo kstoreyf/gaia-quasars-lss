@@ -75,6 +75,12 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
 
 def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_nm.fits.gz',
                 reverse=True):
+    # data file downloaded from Gaia archive
+    # SELECT objID, RAJ2000, DEJ2000, FW1, FW2, nmW1, nmW2
+    # FROM "II/363/unwise"
+    # WHERE RAND() < 0.01
+    # AND FW1>0
+    # AND FW2>0
     if fn_map is not None and os.path.exists(fn_map):
         print(f"unWISE map already exists, loading from {fn_map}")
         return np.load(fn_map)
@@ -168,6 +174,7 @@ def get_unwise_scan_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0
     print(f"Generating new unWISE scan map ({fn_map})")
     tab_unwise = utils.load_table(fn_unwise)
     # use nmW1 here, very similar to nmW2
+    # nmW1: "Number of single-exposure images of this part of sky in coadd in W1"
     map_unwise_scan, _ = get_map(NSIDE, tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], 
                                    func_name='mean', quantity=tab_unwise['nmW1'], null_val=0)
     if fn_map is not None:
