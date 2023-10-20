@@ -6,16 +6,17 @@
 ##SBATCH --job-name=xi_G20_bw4_jack12
 ##SBATCH --job-name=make_table_G20.6
 ##SBATCH --job-name=decontaminate_mag0.1_lm5_postpm_qeboss
-#SBATCH --job-name=sel_func_G20.5_zsplit2bin1
+#SBATCH --job-name=sel_func_G20.5_zsplit3bin0CIB_tiny
 ##SBATCH --job-name=sel_func_G20.0_okaypix
 ##SBATCH --job-name=sel_func_G20.5
 ##SBATCH --job-name=sel_func_G20.0_NSIDE64_fixzeros_mem350_cpu24_hodlr
 ##SBATCH --job-name=animate_gcathi_sdss_cbar_setazim
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=340GB
-##SBATCH --mem=2GB
+##SBATCH --cpus-per-task=48
+##SBATCH --mem=340GB
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=2GB
 #SBATCH --time=14:00:00
 
 # selection function: need mem 175GB. set cpus-per-task=48
@@ -29,7 +30,7 @@ exec --overlay $overlay_ext3:ro \
 /bin/bash; \
 cd /home/ksf293/gaia-quasars-lss/code; \
 conda activate gaiaenv; \
-python selection_function_map.py ../data/quaia_G20.5_zsplit3bin0.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit3bin0.fits;
+python selection_function_map.py ../data/quaia_G20.5_zsplit3bin0CIB.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit3bin0CIB_tiny.fits ../data/quaia_G20.5.fits;
 #python animate.py;
 #python specphotoz.py;
 #python make_data_tables.py;

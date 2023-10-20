@@ -1,17 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=sel_func_G20.5_zsplit3CIB
+#SBATCH --job-name=sel_func_G20.5_zsplit6CIB
 #SBATCH --output=logs/%x_%a.out
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=340GB
-##SBATCH --cpus-per-task=1
-##SBATCH --mem=1GB
-#SBATCH --time=14:00:00
-#SBATCH --array=0-2
+##SBATCH --cpus-per-task=48
+##SBATCH --mem=340GB
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=2GB
+#SBATCH --time=4:00:00
+#SBATCH --array=0-5
 
+n_zbins=6
 echo "'My SLURM_ARRAY_TASK_ID:' $SLURM_ARRAY_TASK_ID"
-echo "'Running selfunc for' ../data/quaia_G20.5_zsplit3bin${SLURM_ARRAY_TASK_ID}CIB.fits"
-echo "'Saving selfunc to' ../data/maps/selection_function_NSIDE64_G20.5_zsplit3bin${SLURM_ARRAY_TASK_ID}CIB.fits"
+echo "'Running selfunc for' ../data/quaia_G20.5_zsplit${n_zbins}bin${SLURM_ARRAY_TASK_ID}CIB.fits"
+echo "'Saving selfunc to' ../data/maps/selection_function_NSIDE64_G20.5_zsplit${n_zbins}bin${SLURM_ARRAY_TASK_ID}CIB.fits"
 
 
 # selection function: set cpus-per-task=48
@@ -26,7 +27,7 @@ exec --overlay $overlay_ext3:ro \
 /bin/bash; \
 cd /home/ksf293/gaia-quasars-lss/code; \
 conda activate gaiaenv; \
-python selection_function_map.py ../data/quaia_G20.5_zsplit3bin${SLURM_ARRAY_TASK_ID}CIB.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit3bin${SLURM_ARRAY_TASK_ID}CIB.fits;
+python selection_function_map.py ../data/quaia_G20.5_zsplit${n_zbins}bin${SLURM_ARRAY_TASK_ID}CIB.fits ../data/maps/selection_function_NSIDE64_G20.5_zsplit${n_zbins}bin${SLURM_ARRAY_TASK_ID}CIB.fits ../data/quaia_G20.5.fits;
 "
 
 

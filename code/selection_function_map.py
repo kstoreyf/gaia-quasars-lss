@@ -19,26 +19,26 @@ python selection_function_map.py <fn_catalog> <fn_selfunc>
 <fn_catalog>: the filepath to catalog to fit a selection function to. 
 must be in fits format and have 'ra' and 'dec' columns in degrees
 
-<fn_selfunc> (optional): the filepath to the selection function map that will be saved;
-should have .fits extension. if not given, 'selection_function.fits' will be used
+<fn_selfunc>: the filepath to the selection function map that will be saved;
+should have .fits extension.
 
-For more control, you can edit the settings in the "run" function call
+<fn_parentcat> (optional): the filepath to the "parent" catalog if relevant; used only to determine zero-pixels (pixels with no quasars) to mask out in final selection function, e.g. if computing the selection function for a redshift slice or other subsample that may have more zero-pixels than should be masked in the final map, only the zero-pixels in the parent catalog will end up being masked. should have .fits extension.
+
+For more control, you can edit the parameters passed to the "run" function call
 within parse_args.
-These settings are: which feature maps to include, the NSIDE, and the 
-scalings of the features and label values (see run() function signature).
+These settings include: which feature maps to include, the NSIDE, which fitting model, the 
+scalings of the features and label values, whether to overwrite maps (see run() function signature).
 """
 
 def parse_args():
     parser=argparse.ArgumentParser(description="make selection function map for input catalog")
-    parser.add_argument("fn_catalog", type=str, nargs='?')
-    parser.add_argument("fn_selfunc", type=str, nargs='?', default='selection_function.fits')
+    parser.add_argument("fn_catalog", type=str)
+    parser.add_argument("fn_selfunc", type=str)
+    parser.add_argument("fn_parentcat", type=str, nargs='?', default=None)
     args=parser.parse_args()
 
-    if args.fn_catalog is None:
-        main()    
-    else:
-        print(f"Running selection function with fn_catalog={args.fn_catalog}, fn_selfunc={args.fn_selfunc}")
-        run(args.fn_catalog, args.fn_selfunc)
+    print(f"Running selection function with fn_catalog={args.fn_catalog}, fn_selfunc={args.fn_selfunc}, fn_parentcat={args.fn_parentcat}")
+    run(args.fn_catalog, args.fn_selfunc, fn_parentcat=args.fn_parentcat)
 
 
 def main():
@@ -48,20 +48,19 @@ def main():
     G_max = 20.0
     tag_cat = ''
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
+    fn_parentcat = None
     fitter_name = 'GP'
 
     map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan']
-    #map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise']
     NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
     pixels_to_fit_mode = 'nonzero'
-    #y_err_mode = 'none'
     y_err_mode = 'poisson'
 
-    #fit_mean = False
     fit_mean = True
-    overwrite = False
+    overwrite_ypred = False
+    overwrite_selfunc = True
 
     if not fit_mean:
         tag_sel += '_nofitmean'
@@ -73,147 +72,110 @@ def main():
         fitter_name=fitter_name,
         x_scale_name=x_scale_name, y_scale_name=y_scale_name,
         y_err_mode=y_err_mode,
-        pixels_to_fit_mode=pixels_to_fit_mode, fit_mean=fit_mean,
-        overwrite=overwrite, 
+        pixels_to_fit_mode=pixels_to_fit_mode, fn_parentcat=fn_parentcat,
+        fit_mean=fit_mean,
+        overwrite_ypred=overwrite_ypred, overwrite_selfunc=overwrite_selfunc, 
         )
 
 
-# for when you want to change the conversion from predicted y map to the selection function probability values! careful, may overwrite
-def recompute_ypred_to_selfunc():
-
-    print("Recomputing selection function probability map from y_pred")
-    G_max = 20.5
-    tag_cat = '_zsplit2bin1'
-    tag_sel = ''
-    NSIDE = 64
-
-    overwrite = True
-
-    fn_ypred = f"../data/maps/y_pred_selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
-    fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
-    fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
-
-    y_pred_full = hp.read_map(fn_ypred)
-
-    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan']
-    maps_forsel = load_maps(NSIDE, map_names)
-
-    print("Loading data", flush=True)
-    tab_gaia = utils.load_table(fn_gaia)
-
-    print("Making QSO map", flush=True)
-    maps_forsel = load_maps(NSIDE, map_names)
-    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
-
-    print("Making probability map", flush=True)
-    map_prob = map_expected_to_probability(y_pred_full, map_nqso_data, map_names, maps_forsel)
-    hp.write_map(fn_selfunc, map_prob, overwrite=overwrite)
-    print(f"Saved map to {fn_selfunc}!", flush=True)
-
-
-def run(fn_gaia, fn_selfunc, NSIDE=64, map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan'], 
+def run(fn_gaia, fn_selfunc, NSIDE=64, 
+        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan'], 
         fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
-        y_err_mode='poisson',
-        pixels_to_fit_mode='nonzero', fit_mean=True,
-        overwrite=False):
-
-    if os.path.exists(fn_selfunc) and not overwrite:
-        sys.exit(f"Selection function path {fn_selfunc} exists and overwrite is {overwrite}, so exiting")
+        y_err_mode='poisson', 
+        pixels_to_fit_mode='nonzero', fn_parentcat=None,
+        fit_mean=True, overwrite_ypred=False, overwrite_selfunc=True):
 
     start = time.time()
 
     fn_ypred = f'{os.path.dirname(fn_selfunc)}/y_pred_{os.path.basename(fn_selfunc)}'
+    if os.path.exists(fn_selfunc) and not overwrite_selfunc and os.path.exists(fn_ypred) and not overwrite_ypred:
+        sys.exit(f"y_pred {fn_ypred} exists and overwrite_ypred is {overwrite_ypred}, and selection function {fn_selfunc} exists and overwrite is {overwrite_selfunc}, so exiting")
 
     print("Loading data", flush=True)
     tab_gaia = utils.load_table(fn_gaia)
-
     print("Making QSO map", flush=True)
     maps_forsel = load_maps(NSIDE, map_names)
-    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
 
-    print("Constructing X and y", flush=True)
-    NPIX = hp.nside2npix(NSIDE)
-    X_train_full = construct_X(NPIX, map_names, maps_forsel, fitter_name)
+    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
     y_train_full = map_nqso_data
     # need this because will be inserting small vals where zero
     y_train_full = y_train_full.astype(float)
-
     i_nonzero = y_train_full > 0
 
-    print("Getting indices to fit", flush=True)
-    if pixels_to_fit_mode=='all':
-        if y_scale_name=='log':
-            idx_zero = np.abs(y_train_full) < 1e-4
-            print('num zeros:', np.sum(idx_zero))
-            y_train_full[idx_zero] = 0.5       # set zeros to 1/2 a star
-        idx_fit = np.full(len(y_train_full), True)
-        print('min post', np.min(y_train_full), flush=True)
-    elif pixels_to_fit_mode=='nonzero' :
-        idx_fit = i_nonzero
-    elif pixels_to_fit_mode=='okay':
-        i_okay = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
-        idx_fit = i_nonzero & i_okay
-        #idx_fit = i_okay
+    if os.path.exists(fn_ypred) and not overwrite_ypred:
+        y_pred_full = hp.read_map(fn_ypred)
     else:
-        raise ValueError(f'mode {pixels_to_fit_mode} not recognized!')
 
-    # poisson: standard dev = sqrt(N) [so var = N]
-    if y_err_mode=='poisson':
-        y_err_train_full = np.sqrt(y_train_full) # assume poission error
-        print('err min max:', np.min(y_err_train_full), np.max(y_err_train_full))
-    elif y_err_mode=='none':
-        y_err_train_full = None
-        #y_err_train_full = np.ones(y_train_full.size)
-    else:
-        raise ValueError(f'mode {y_err_mode} not recognized!')
+        print("Constructing X", flush=True)
+        NPIX = hp.nside2npix(NSIDE)
+        X_train_full = construct_X(NPIX, map_names, maps_forsel, fitter_name)
 
+        print("Getting indices to fit", flush=True)
+        if pixels_to_fit_mode=='all':
+            if y_scale_name=='log':
+                idx_zero = np.abs(y_train_full) < 1e-4
+                print('num zeros:', np.sum(idx_zero))
+                y_train_full[idx_zero] = 0.5       # set zeros to 1/2 a star
+            idx_fit = np.full(len(y_train_full), True)
+            print('min post', np.min(y_train_full), flush=True)
+        elif pixels_to_fit_mode=='nonzero' :
+            idx_fit = i_nonzero
+        elif pixels_to_fit_mode=='okay':
+            i_okay = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
+            idx_fit = i_nonzero & i_okay
+        else:
+            raise ValueError(f'mode {pixels_to_fit_mode} not recognized!')
 
-    #FOR TESTING PURPOSES ONLY
-    # print("TINY TEST")
-    # idx_fit[100:] = False
-    # print("THIRD TEST")
-    # idx_fit[0::3] = False
-    # idx_fit[1::3] = False
+        # poisson: standard dev = sqrt(N) [so var = N]
+        if y_err_mode=='poisson':
+            y_err_train_full = np.sqrt(y_train_full) # assume poission error
+            print('err min max:', np.min(y_err_train_full), np.max(y_err_train_full))
+        elif y_err_mode=='none':
+            y_err_train_full = None
+        else:
+            raise ValueError(f'mode {y_err_mode} not recognized!')
 
-    X_train = X_train_full[idx_fit]
-    y_train = y_train_full[idx_fit]
-    if y_err_train_full is None:
-        y_err_train = None
-    else:
-        y_err_train = y_err_train_full[idx_fit]
+        #FOR TESTING PURPOSES ONLY
+        # print("TINY TEST")
+        # idx_fit[100:] = False
+        # print("THIRD TEST")
+        # idx_fit[0::3] = False
+        # idx_fit[1::3] = False
 
-    print("Training fitter", flush=True)
-    print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
-    print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
-    print(X_train[3:])
-    fitter_dict = {'linear': FitterLinear,
-                   'GP': FitterGP}
-    fitter_class = fitter_dict[fitter_name]
-    fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
-                      fit_mean=fit_mean,
-                      x_scale_name=x_scale_name, y_scale_name=y_scale_name,
-                      map_names=map_names)
-    fitter.train()
-    print("Predicting", flush=True)
-    # only predict values in nonzero pixels; if was zero, keep at zero
-    # no training data there so don't trust predictions
-    X_train_nonzero = X_train_full[i_nonzero]
-    y_pred_nonzero = fitter.predict(X_train_nonzero)
-    y_pred_full = np.zeros(y_train_full.shape)
-    y_pred_full[i_nonzero] = y_pred_nonzero
+        X_train = X_train_full[idx_fit]
+        y_train = y_train_full[idx_fit]
+        if y_err_train_full is None:
+            y_err_train = None
+        else:
+            y_err_train = y_err_train_full[idx_fit]
 
-    # y_pred_notfit = fitter.predict(X_train_full[~idx_fit])
-    # y_pred_full[~idx_fit] = y_pred_notfit
-    
-    print(f"Saving ypred map to {fn_ypred}")
-    hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite)
+        print("Training fitter", flush=True)
+        print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
+        print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
+        print(X_train[3:])
+        fitter_dict = {'linear': FitterLinear,
+                    'GP': FitterGP}
+        fitter_class = fitter_dict[fitter_name]
+        fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
+                        fit_mean=fit_mean,
+                        x_scale_name=x_scale_name, y_scale_name=y_scale_name,
+                        map_names=map_names)
+        fitter.train()
+        
+        print("Predicting", flush=True)
+        y_pred_full = fitter.predict(X_train_full)
+        
+        print(f"Saving ypred map to {fn_ypred}")
+        hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite_ypred)
 
     print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
 
-    print("Making probability map", flush=True)
-    map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel)
-    hp.write_map(fn_selfunc, map_prob, overwrite=overwrite)
-    print(f"Saved map to {fn_selfunc}!", flush=True)
+    if not os.path.exists(fn_selfunc) or overwrite_selfunc:
+        print("Making selection function map", flush=True)
+        map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel, NSIDE=NSIDE, i_keep=i_nonzero, fn_parentcat=fn_parentcat)
+
+        hp.write_map(fn_selfunc, map_prob, overwrite=overwrite_selfunc)
+        print(f"Saved map to {fn_selfunc}!", flush=True)
 
     end = time.time()
     print(f"Time: {end-start} s ({(end-start)/60.} min)", flush=True)
@@ -246,7 +208,8 @@ def get_okay_pixels(map_true, map_names, maps_forsel):
     return i_okay
 
 
-def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
+def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel,
+                                NSIDE=64, i_keep=None, fn_parentcat=None):
     idx_clean = np.full(len(map_expected), True)
     for map_name, map in zip(map_names, maps_forsel):
         if map_name=='dust':
@@ -263,9 +226,18 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel):
     # 2 standard deviations above should mean that most, if not all, values are below 1
     nqso_max = nqso_clean + 2*np.std(map_true[idx_clean])
     map_prob = map_expected / nqso_max
+
+    if fn_parentcat is not None:
+        print("Using parent catalog to determine zero-probability pixels")
+        print("(If i_keep also passed, will be ignored!)")
+        tab_parentcat = utils.load_table(fn_parentcat)
+        map_nqso_parent, _ = maps.get_map(NSIDE, tab_parentcat['ra'], tab_parentcat['dec'], null_val=0)
+        i_keep = map_nqso_parent>0
+
+    if i_keep is not None:
+        map_prob[~i_keep] = 0.0
+
     # it's alright if vals go above 1, it's just a rescaling, but with 2*std none of our fiducial catalogs have >1 vals
-    #map_prob[map_prob>1.0] = 1.0
-    #assert np.all(map_prob <= 1.0) and np.all(map_prob >= 0.0), "Probabilities must be <=1 and >=0!"
     print(f"min: {np.min(map_prob)}, max: {np.max(map_prob)}")
     return map_prob
 
@@ -441,7 +413,6 @@ class FitterGP(Fitter):
         kernel = george.kernels.ExpSquaredKernel(p0, ndim=ndim)
 
         # this will add a free parameter to scale the overall amplitude, which has units of variance
-        # (initially had forgotten this!)
         amp = np.var(self.y_train_scaled)
         kernel *= amp
         
@@ -450,13 +421,11 @@ class FitterGP(Fitter):
         #mean = np.mean(self.y_train_scaled)
         mean = 0.0
         self.gp = george.GP(kernel, mean=mean, fit_mean=self.fit_mean)
-        #print("using hodlr solver")
-        #self.gp = george.GP(kernel, solver=george.HODLRSolver)
+
         print('parameter names:', self.gp.get_parameter_names())
         print('paramters init:', self.gp.get_parameter_vector())
 
         print('y minmax', np.min(self.y_train_scaled), np.max(self.y_train_scaled))
-        #print('yerr minmax', np.min(self.y_err_train_scaled), np.max(self.y_err_train_scaled))
         print('yerr:', self.y_err_train, self.y_err_train_scaled)
 
         if self.y_err_train_scaled is None:
@@ -468,14 +437,14 @@ class FitterGP(Fitter):
 
         def neg_ln_like(p):
             self.gp.set_parameter_vector(p)
-            print(p)
-            print('like:', -self.gp.log_likelihood(self.y_train_scaled))
+            #print(p)
+            #print('like:', -self.gp.log_likelihood(self.y_train_scaled))
             return -self.gp.log_likelihood(self.y_train_scaled)
 
         def grad_neg_ln_like(p):
             self.gp.set_parameter_vector(p)
-            print(p)
-            print('grad like:', -self.gp.grad_log_likelihood(self.y_train_scaled))
+            #print(p)
+            #print('grad like:', -self.gp.grad_log_likelihood(self.y_train_scaled))
             return -self.gp.grad_log_likelihood(self.y_train_scaled)
 
         print("Minimizing")
@@ -518,9 +487,7 @@ class FitterLinear(Fitter):
             Cinv = np.diag(1./(self.y_err_train_scaled**2))
             XTCinvX = self.X_train_scaled.T @ Cinv @ self.X_train_scaled
             XTCinvy = self.X_train_scaled.T @ Cinv @ self.y_train_scaled
-        # XTCinvX = self.X_train_scaled.T @ self.X_train_scaled
-        # XTCinvy = self.X_train_scaled.T @ self.y_train_scaled
-        #self.theta = np.linalg.solve(XTCinvX, XTCinvy)
+
         res = np.linalg.lstsq(XTCinvX, XTCinvy, rcond=None)
         self.theta = res[0]
         print('theta:', self.theta)
@@ -535,6 +502,5 @@ class FitterLinear(Fitter):
 if __name__=='__main__':
     #main()
     parse_args()
-    #recompute_ypred_to_selfunc()
 
 
