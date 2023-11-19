@@ -51,7 +51,7 @@ def main():
     fn_parentcat = None
     fitter_name = 'GP'
 
-    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan']
+    map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
     NSIDE = 64
     x_scale_name = 'zeromean'
     y_scale_name = 'log'
@@ -79,7 +79,7 @@ def main():
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, 
-        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan'], 
+        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise'], 
         fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson', 
         pixels_to_fit_mode='nonzero', fn_parentcat=None,
@@ -152,7 +152,6 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         print("Training fitter", flush=True)
         print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
         print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
-        print(X_train[3:])
         fitter_dict = {'linear': FitterLinear,
                     'GP': FitterGP}
         fitter_class = fitter_dict[fitter_name]
@@ -219,7 +218,9 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel,
         elif map_name=='m10':
             idx_map = map > 21
         elif map_name=='mcs':
-            idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be redundant w stars
+            idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be (semi?-)redundant w stars
+        elif map_name=='mcsunwise':
+            idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be (semi?-)redundant w unwise
         idx_clean = idx_clean & idx_map
     print("Number of clean healpixels:", np.sum(idx_clean), f"(Total: {len(map_expected)})")
     nqso_clean = np.mean(map_true[idx_clean])
@@ -251,6 +252,7 @@ def load_maps(NSIDE, map_names):
                      'mcs': maps.get_mcs_map,
                      'unwise': maps.get_unwise_map,
                      'unwisescan': maps.get_unwise_scan_map,
+                     'mcsunwise': maps.get_mcsunwise_map,
                      }
 
     for map_name in map_names:
@@ -285,6 +287,12 @@ def f_unwise(map_u):
 def f_unwisescan(map_us):
     return np.log(map_us)
 
+def f_mcsunwise(map_mcsu):
+    map_mcsu = map_mcsu.astype(float)
+    i_zeroorneg = map_mcsu < 1e-4
+    map_mcsu[i_zeroorneg] = 1e-4
+    return np.log(map_mcsu)
+
 
 def construct_X(NPIX, map_names, maps_forsel, fitter_name):
     f_dict = {'dust': f_dust,
@@ -293,6 +301,7 @@ def construct_X(NPIX, map_names, maps_forsel, fitter_name):
              'mcs': f_mcs,
              'unwise': f_unwise,
              'unwisescan': f_unwisescan,
+             'mcsunwise': f_mcsunwise,
              }
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
     print(X.shape)
@@ -397,13 +406,14 @@ class FitterGP(Fitter):
         ndim = self.X_train.shape[1]
         n_params = self.X_train_scaled.shape[1]
         print("n params:", n_params)
-        #based on previous optimizations
-        log_init_guesses = {'dust': -0.1,
-                        'stars': 2,
-                        'm10': -2,
+        #based on previous optimizations (G20.0 most recently)
+        log_init_guesses = {'dust': -0.5,
+                        'stars': 1.5,
+                        'm10': -1,
                         'mcs': 5,
-                        'unwise': 1,
-                        'unwisescan': 1,
+                        'unwise': 0.8,
+                        'unwisescan': 0,
+                        'mcsunwise': 10,
                         }
         if self.map_names is not None:
             log_p0 = np.array([log_init_guesses[map_name] for map_name in self.map_names]) 

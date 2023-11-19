@@ -56,8 +56,7 @@ def get_map(NSIDE, ra, dec, quantity=None, func_name='count',
     return map, pixel_indices
 
     
-def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz',
-                reverse=True):
+def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"Star map already exists, loading from {fn_map}")
         return np.load(fn_map)
@@ -73,8 +72,8 @@ def get_star_map(NSIDE=None, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.
     return map_stars
 
 
-def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_nm.fits.gz',
-                reverse=True):
+def get_unwise_map(NSIDE=None, fn_map=None, 
+                   fn_unwise='../data/unwise_rand0.01_nm_prim.fits.gz'):
     # data file downloaded from Gaia archive
     # SELECT objID, RAJ2000, DEJ2000, FW1, FW2, nmW1, nmW2
     # FROM "II/363/unwise"
@@ -87,6 +86,10 @@ def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_n
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     print(f"Generating new unWISE map ({fn_map})")
     tab_unwise = utils.load_table(fn_unwise)
+    # removes about 10% of sources with Prim=0
+    # PrimW1: "[0/1] The center of this source is in the primary region of its coadd in W1"
+    # Prim: [0/1] W1 primary status, if available; otherwise W2 primary status
+    tab_unwise = tab_unwise[tab_unwise['Prim']==1]
     # Take the average over these points, so for a given NSIDE should get exact same map
     map_unwise, _ = get_map(NSIDE, tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], 
                                    func_name='count', null_val=0)
@@ -96,7 +99,8 @@ def get_unwise_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_n
     return map_unwise
 
 
-def get_mcs_map(NSIDE, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz',
+def get_mcs_map(NSIDE, fn_map=None, 
+                fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz',
                 fn_starmap=None):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"MCs map already exists, loading from {fn_map}")
@@ -108,7 +112,6 @@ def get_mcs_map(NSIDE, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand
 
     from astropy.coordinates import Galactic, ICRS
 
-    fn_stars='../data/stars_gaia_G18.5-20.0_rand3e7.fits.gz'
     tab_stars = utils.load_table(fn_stars)
 
     cat = SkyCoord(tab_stars['ra'], tab_stars['dec'], frame='icrs')
@@ -146,6 +149,58 @@ def get_mcs_map(NSIDE, fn_map=None, fn_stars='../data/stars_gaia_G18.5-20.0_rand
     return map_mcs
 
 
+def get_mcsunwise_map(NSIDE, fn_map=None, 
+                      fn_unwise='../data/unwise_rand0.01_nm_prim.fits.gz',
+                      fn_unwisemap=None):
+    if fn_map is not None and os.path.exists(fn_map):
+        print(f"MCs map already exists, loading from {fn_map}")
+        return np.load(fn_map)
+    assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
+    
+    if fn_unwisemap is None:
+        fn_unwisemap = f'../data/maps/map_unwise_NSIDE{NSIDE}.npy'
+
+    from astropy.coordinates import Galactic, ICRS
+
+    tab_unwise = utils.load_table(fn_unwise)
+    # removes about 10% of sources with Prim=0
+    tab_unwise = tab_unwise[tab_unwise['Prim']==1]
+
+    cat = SkyCoord(tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], frame='icrs')
+    cat_galactic = cat.transform_to(Galactic())
+    cat_galactic_reversed = SkyCoord(360*u.deg-cat_galactic.l, cat_galactic.b, frame='galactic')
+    cat_reversed = cat_galactic_reversed.transform_to(ICRS())
+
+    map_unwise_reversed, _ = get_map(NSIDE, cat_reversed.ra.value*u.deg, cat_reversed.dec.value*u.deg, 
+                                        func_name='count', null_val=0)
+
+    map_unwise = get_unwise_map(NSIDE=NSIDE, fn_map=fn_unwisemap)
+    map_mcsunwise = map_unwise - map_unwise_reversed
+
+    coord_lmc = SkyCoord('5h23m34.5s', '-69d45m22s', frame='icrs')
+    coord_smc = SkyCoord('0h52m44.8s', '-72d49m43s', frame='icrs')
+
+    sep_max_lmc = 9*u.deg
+    sep_max_smc = 5*u.deg
+
+    vec_lmc = hp.ang2vec(coord_lmc.ra.value, coord_lmc.dec.value, lonlat=True)
+    vec_smc = hp.ang2vec(coord_smc.ra.value, coord_smc.dec.value, lonlat=True)
+    # returns list of indices (not booleans)
+    ipix_lmc = hp.query_disc(nside=NSIDE, vec=vec_lmc, radius=sep_max_lmc.to('radian').value)
+    ipix_smc = hp.query_disc(nside=NSIDE, vec=vec_smc, radius=sep_max_smc.to('radian').value)
+
+    i_mcs = np.full(len(map_mcsunwise), False)
+    i_mcs[ipix_lmc] = True
+    i_mcs[ipix_smc] = True
+
+    map_mcsunwise[~i_mcs] = 0.0
+    
+    if fn_map is not None:
+        np.save(fn_map, map_mcsunwise)
+        print(f"Saved MCs map to {fn_map}")
+    return map_mcsunwise
+
+
 ### Completeness / M10 selection function model map functions
 
 
@@ -166,13 +221,16 @@ def get_m10_map(NSIDE, fn_map=None):
     return m10_map
 
 
-def get_unwise_scan_map(NSIDE=None, fn_map=None, fn_unwise='../data/unwise_rand0.01_nm.fits.gz'):
+def get_unwise_scan_map(NSIDE=None, fn_map=None, 
+                        fn_unwise='../data/unwise_rand0.01_nm_prim.fits.gz'):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"unWISE scan map already exists, loading from {fn_map}")
         return np.load(fn_map)
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     print(f"Generating new unWISE scan map ({fn_map})")
     tab_unwise = utils.load_table(fn_unwise)
+    # removes about 10% of sources with Prim=0
+    tab_unwise = tab_unwise[tab_unwise['Prim']==1]
     # use nmW1 here, very similar to nmW2
     # nmW1: "Number of single-exposure images of this part of sky in coadd in W1"
     map_unwise_scan, _ = get_map(NSIDE, tab_unwise['RAJ2000'], tab_unwise['DEJ2000'], 

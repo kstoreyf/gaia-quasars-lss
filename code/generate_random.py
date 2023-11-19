@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("fn_catalog", type=str, nargs='?', default=None)
     args=parser.parse_args()
 
-    print(f"Generating random with fn_selfunc={args.fn_selfunc}, NSIDE_map={args.NSIDE_map}," \
+    print(f"Generating random with fn_selfunc={args.fn_selfunc}, NSIDE_map={args.NSIDE_map}, " \
          f"fn_rand={args.fn_rand}, fn_catalog={args.fn_catalog}")
     run(args.fn_selfunc, args.NSIDE_map, args.fn_rand, fn_catalog=args.fn_catalog)
 
@@ -127,5 +127,5 @@ def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc):
 
 
 if __name__=='__main__':
-    main()
-    #parse_args()
+    #main()
+    parse_args()
