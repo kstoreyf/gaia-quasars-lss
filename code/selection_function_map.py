@@ -45,7 +45,7 @@ def main():
     print("starting selection function", flush=True)
 
     tag_sel = ''
-    G_max = 20.0
+    G_max = 20.5
     tag_cat = ''
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fn_parentcat = None
@@ -215,8 +215,12 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel,
             idx_map = map < 0.03
         elif map_name=='stars':
             idx_map = map < 15
+        elif map_name=='unwise':
+            idx_map = map < 150
         elif map_name=='m10':
             idx_map = map > 21
+        elif map_name=='unwisescan':
+            idx_map = map > 150
         elif map_name=='mcs':
             idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be (semi?-)redundant w stars
         elif map_name=='mcsunwise':
@@ -510,7 +514,7 @@ class FitterLinear(Fitter):
 
 
 if __name__=='__main__':
-    #main()
-    parse_args()
+    main()
+    #parse_args()
 
 
