@@ -134,12 +134,13 @@ def main_2panel():
     tag_cat = ''
 
     #plot_dir = '../plots/2023-04-04_figures'
-    anim_dir = '../plots/2023-05-27_animations'
+    #anim_dir = '../plots/2023-05-27_animations'
+    anim_dir = '../plots/2023-10-08_figures'
     plot_dir = anim_dir
     image_only = True
-    #make_anim = True
     #tag_anim = '_alpha0.1_black'
-    tag_anim = '_cbar_setazim_alpha0.07'
+    #tag_anim = '_cbar_setazim_alpha0.07'
+    tag_anim = ''
 
     fn_datas, titles, redshift_names, properties_colorby, radec_names = [], [], [], [], []
     if 'gcathi' in data_tags:
@@ -170,16 +171,10 @@ def main_2panel():
     fn_save_init = f'{plot_dir}/image_{data_tag}_N{N_sub_str}{tag_anim}_3d.png'
 
     if N_sub_str=='all':
-        #alpha = 0.1
-        #s = 0.11
         alpha = 0.03
         s = 0.1
-        # alpha = 0.1
-        # s = 0.03
-        if image_only:
-            # for some reason it looks diff in image and vid! so make it look more similar
-            alpha = 0.07
-            s = 0.1
+        # for some reason it looks diff in image and vid! so make it look more similar
+        alpha_image = 0.07
     else:
         # to make visible for tests
         alpha = 1
@@ -208,19 +203,19 @@ def main_2panel():
     # Create an init function and the animate functions.
     print(f"s = {s}, alpha={alpha}, lim={lim}, vmin={vmin}, vmax={vmax}")
 
-    # if make_image:
-    #     plot_init(tab, tab[property_colorby], s, alpha, lim, vmin, vmax,
-    #                 cmap=scmap, colorbar_label=colorbar_label,
-    #                 fn_save_init=fn_save_init, facecolor=facecolor)
-    #     print("Saved image!")
-
-    #if make_anim:
     vals_colorby = [data_arr[j][properties_colorby[j]] for j in range(len(data_arr))]
-    anim = make_animation_2panel(data_arr, vals_colorby, s, alpha, lim, vmin, vmax,
+
+    # for image, want diff alpha, so do it separately first
+    _ = make_animation_2panel(data_arr, vals_colorby, s, alpha_image, lim, vmin, vmax,
                     cmap=scmap, title_arr=titles,
                     facecolor=facecolor, fn_save_init=fn_save_init)
 
+    # now the one that actually makes the animation
     if not image_only:
+        print("Setting up animation")
+        anim = make_animation_2panel(data_arr, vals_colorby, s, alpha, lim, vmin, vmax,
+                    cmap=scmap, title_arr=titles,
+                    facecolor=facecolor)
         print("Saving animation to", fn_save)
         s = time.time()
         if format_save=='gif':
@@ -430,7 +425,7 @@ def make_animation_2panel(data_arr, c_arr, s, alpha, lim, vmin, vmax, cmap='plas
         ax1.view_init(elev=elev, azim=azim+i)
         return fig,
 
-    # First save initial frame as image
+    # Save initial frame as image
     if fn_save_init is not None:
         init()
         plt.savefig(fn_save_init)
