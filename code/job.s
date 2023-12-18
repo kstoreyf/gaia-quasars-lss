@@ -12,16 +12,16 @@
 ##SBATCH --job-name=sel_func_G20.5
 ##SBATCH --job-name=sel_func_G20.0_NSIDE64_fixzeros_mem350_cpu24_hodlr
 ##SBATCH --job-name=animate_gcathi_sdss_cbar_setazim
-#SBATCH --job-name=animate_gcathi_sdss_image
+#SBATCH --job-name=animate_gcathi_sdss_image_lowmem
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 ##SBATCH --cpus-per-task=48
 ##SBATCH --mem=340GB
 ##SBATCH --cpus-per-task=4
 ##SBATCH --mem=10GB
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=20GB
-#SBATCH --time=8:00:00
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=5GB
+#SBATCH --time=1:00:00
 
 G_max="20.5"
 
