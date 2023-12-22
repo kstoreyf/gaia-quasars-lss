@@ -52,18 +52,21 @@ def parse_args():
 
 def main():
 
-    G_max = 20.0
+    G_max = 20.5
     #tag_cat = '_qeboss'
     tag_cat = ''
     tag_sel = ''
 
-    fac_rand = 10
+    fac_rand = 1
     NSIDE_map = 64
 
     # File names (fn_selfunc is selection function map)
-    fn_selfunc = f'../data/maps/selection_function_NSIDE{NSIDE_map}_G{G_max}{tag_cat}{tag_sel}.fits'
+    #fn_selfunc = f'../data/maps/selection_function_NSIDE{NSIDE_map}_G{G_max}{tag_cat}{tag_sel}.fits'
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits'
-    fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x.fits'
+    #fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x_retry.fits'
+
+    fn_selfunc = f'../data/maps/selfunc_test.fits'
+    fn_rand = f'../data/randoms/random_test.fits'
     overwrite = True
 
     run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_gaia,
@@ -118,6 +121,7 @@ def indices_for_downsample(rng, probability_accept):
 
 def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc):
     map_p = hp.read_map(fn_selfunc)
+    print('Sel func min and max:', np.min(map_p), np.max(map_p))
     _, pixel_indices_rand = maps.get_map(NSIDE_map, ra, dec)
     p_rand = map_p[pixel_indices_rand]
     assert np.all(p_rand>=0) and np.all(p_rand<=1), "Bad probability vals!" 
@@ -127,5 +131,5 @@ def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc):
 
 
 if __name__=='__main__':
-    #main()
-    parse_args()
+    main()
+    #parse_args()
