@@ -44,7 +44,8 @@ def main():
     #redshift_estimator_name = 'xgboost'
     save_tag_model = f'_{redshift_estimator_name}_K{K}_std'
 
-    tag_cat = '_mags-0.05'
+    tag_cat = ''
+    #tag_cat = '_mags-0.05'
     name_qspec = 'sdss'
     tag_qspec = ''
     # name_qspec = 'eboss'
@@ -70,7 +71,6 @@ def run(fn_gaia, fn_labeled, fn_spz, fn_spz_labeled, fn_model,
 
     mode = 'regression'
 
-    #K = 31
     learning_rate = 0.005
     apply_to_all = True
     overwrite_model = True

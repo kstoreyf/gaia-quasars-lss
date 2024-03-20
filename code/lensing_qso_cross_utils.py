@@ -82,25 +82,50 @@ def compute_master(f_a, f_b, wsp):
     return cl_decoupled
 
 
-def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False,w=None):
+def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_gg_th=None,cls_kg_th=None,gsyst=None,return_mode_coupling=False,w=None,beam_k=True,beam_g=True):
     
     nside = hp.npix2nside(len(klr))
-    klm = hp.map2alm(klr,iter=1,pol=False)
     # corrects for pixel window function
-    beam = hp.pixwin(nside,lmax=lmax,pol=False)
+    if beam_k:
+        beam_k = hp.pixwin(nside,lmax=lmax,pol=False)
+    else:
+        beam_k = None
+    if beam_g:
+        bl_g = hp.pixwin(nside,lmax=lmax,pol=False)
+    else:
+        bl_g = None        
     
-    f0 = nmt.NmtField(apodized_mask, [klr],beam=beam) # corrects for pixel window as klr computed from downgrade
+    f0 = nmt.NmtField(apodized_mask, [klr],beam=beam_k) # corrects for pixel window as klr computed from downgrade
+
+    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()*0],beam=bl_g,templates=gsyst)
+    f11 = nmt.NmtField(apodized_mask, [c1],beam=bl_g,templates=gsyst)
+    f12 = nmt.NmtField(apodized_mask, [c2],beam=bl_g,templates=gsyst)
+    fjk = nmt.NmtField(apodized_mask, [jk],beam=bl_g,templates=gsyst)
+
     if w is None:
         w = nmt.NmtWorkspace()
-        w.compute_coupling_matrix(f0, f0, binning)    
+        w.compute_coupling_matrix(f0, f0, binning)
+        if beam_g:
+            print("Warning: assume same coupling for all fields with same pixwin as lensing")
+            wg = w
+            wx = w
+        else:
+            wg = nmt.NmtWorkspace()
+            wx = nmt.NmtWorkspace()
+            wg.compute_coupling_matrix(f1, f1, binning)
+            wx.compute_coupling_matrix(f0, f1, binning)
+    else:
+        print(type(w))
+        if type(w) is list:
+            [w,wg,wx]=w
+        else:
+            print("Warning: only one coupling givven. Assume same coupling for all fields")
+            wg = w
+            wx = w
 
-    f1 = nmt.NmtField( apodized_mask, [c-c[apodized_mask!=0].mean()],beam=beam,templates=gsyst)
-    f11 = nmt.NmtField(apodized_mask, [c1],beam=beam,templates=gsyst)
-    f12 = nmt.NmtField(apodized_mask, [c2],beam=beam,templates=gsyst)
-    fjk = nmt.NmtField(apodized_mask, [jk],beam=beam,templates=gsyst)
-    
-    clkg = compute_master(f0, f1, w)[0]
-    clgg = compute_master(f1, f1, w)[0]
+
+    clkg = compute_master(f0, f1, wx)[0]
+    clgg = compute_master(f1, f1, wg)[0]
     clkk = compute_master(f0, f0, w)[0]
     
     clkg1 = compute_master(f0, f11, w)[0]
@@ -115,10 +140,11 @@ def compute_master_crosscorr_mask(klr,c,c1,c2,jk,apodized_mask,binning,lmax,cls_
     clgjk = compute_master(fjk, fjk, w)[0]
     if ((cls_gg_th is None) and (cls_kg_th is None)):
         if return_mode_coupling:
-            return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk,w
+            return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk,[w,wg,wx]
         else:
             return clkg,clgg,clkk,clkg1,clg1g1,clkg2,clg2g2,clg1g2,clkgjk,clgjk
     else:
+        klm = hp.map2alm(klr,iter=1,pol=False)
         cl_gg_th_binned = w.decouple_cell(w.couple_cell([cls_gg_th]))[0]
         cl_kg_th_binned = w.decouple_cell(w.couple_cell([cls_kg_th]))[0]
         cl_kk_th_binned = w.decouple_cell(w.couple_cell([hp.alm2cl(klm)]))[0]    

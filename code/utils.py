@@ -7,6 +7,7 @@ from astropy import units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky, search_around_sky
 from dustmaps.sfd import SFDQuery
+from dustmaps.csfd import CSFDQuery
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -163,21 +164,53 @@ def groupby(values, group_indices):
 
 ### Extinction
 
-def add_ebv(tab):
-    ebv = get_ebv(tab['ra'], tab['dec'])
+def fetch_dustmap(map_name='csfd', data_dir='../data/dustmaps'):
+    # if already exists, don't need to fetch
+    if os.path.exists(f'{data_dir}/{map_name}'):
+        return
+    import dustmaps
+    import dustmaps.sfd, dustmaps.csfd
+    map_dict = {'sfd': dustmaps.sfd, 
+                'csfd': dustmaps.csfd}
+    if map_name not in map_dict:
+        raise ValueError(f"Map name {map_name} not recognized!")
+    from dustmaps.config import config
+    config['data_dir'] = data_dir
+
+    map_dict[map_name].fetch()
+
+
+def get_ebv(ra, dec, map_name='csfd'):
+    assert map_name in ['sfd', 'csfd'], "Map name not recognized!"
+    fetch_dustmap(map_name=map_name) #will only fetch if not already fetched
+    if map_name=='sfd':
+        sfd = SFDQuery()
+    elif map_name=='csfd':
+        sfd = CSFDQuery()
+    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
+    ebv_orig = sfd(coords)
+    # rescaling correction described in https://arxiv.org/pdf/1009.4933.pdf
+    # the rescaling factor is not included in CSFD either (see sec A1 of https://arxiv.org/pdf/2306.03926.pdf)
+    ebv_rescaled = 0.86*ebv_orig
+    return ebv_rescaled
+
+
+def add_ebv(tab, map_name='csfd'):
+    ebv = get_ebv(tab['ra'], tab['dec'], map_name=map_name)
     tab.add_column(ebv, name='ebv')
 
 
-def get_ebv(ra, dec):
-    sfd = SFDQuery()
-    coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
-    ebv = sfd(coords)
-    return ebv
-
-
-def get_extinction(ra, dec, R=3.1):
-    ebv = get_ebv(ra, dec)
+def get_extinction(ra, dec, R=3.1, map_name='csfd'):
+    ebv = get_ebv(ra, dec, map_name=map_name)
     return R*ebv
+
+
+def add_extinction(tab, R=3.1, map_name='csfd'):
+    if 'ebv' in tab.columns:
+        A_v = R*tab['ebv']
+    else:
+        A_v = get_extinction(tab['ra'], tab['dec'], R=R, map_name=map_name)
+    tab.add_column(A_v, name='A_v')
 
 
 ### Coordinates
@@ -469,12 +502,13 @@ label2unit_dict = {'source_id': None,
 unit2latex_dict = {'mas yr-1': 'mas yr$^{-1}$',
                    'None': ''}
 
+# checked ref_epoch for some sources, all 2016
 label2description_dict = {'source_id': '\emph{Gaia} DR3 source identifier',
         'unwise_objid': 'unWISE DR1 source identifier',
         'redshift_quaia': 'spectrophotometric redshift estimate',
         'redshift_quaia_err': '$1\sigma$ uncertainty on spectrophotometric redshift estimate',
-        'ra': 'right ascension',
-        'dec': 'declination', 
+        'ra': 'barycentric right ascension of the source in ICRS at 2016.0',
+        'dec': 'barycentric declination $\delta$ of the source in ICRS at 2016.0', 
         'l': 'galactic longitude',
         'b': 'galactic latitude',
         'phot_g_mean_mag': '\emph{Gaia} $G$-band mean magnitude',
@@ -482,9 +516,9 @@ label2description_dict = {'source_id': '\emph{Gaia} DR3 source identifier',
         'phot_rp_mean_mag': '\emph{Gaia} integrated $RP$ mean magnitude',
         'mag_w1_vg': 'unWISE $W1$ magnitude',
         'mag_w2_vg': 'unWISE $W2$ magnitude',
-        'pm': 'proper motion',
-        'pmra': 'proper motion in right ascension direction',
-        'pmdec': 'proper motion in declination direction',
+        'pm': 'total proper motion',
+        'pmra': 'proper motion in right ascension $\mu_{\\alpha*} \equiv \mu_\\alpha \, \mathrm{cos} \, \delta$ of the source in ICRS at 2016.0',
+        'pmdec': 'proper motion in declination $\mu_{\delta}$ of the source in ICRS at 2016.0',
         'pmra_error': 'standard error of proper motion in right ascension direction',
         'pmdec_error': 'standard error of proper motion in declination direction',
         }
