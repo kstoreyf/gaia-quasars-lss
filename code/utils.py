@@ -6,8 +6,6 @@ import healpy as hp
 from astropy import units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky, search_around_sky
-from dustmaps.sfd import SFDQuery
-from dustmaps.csfd import CSFDQuery
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -181,6 +179,8 @@ def fetch_dustmap(map_name='csfd', data_dir='../data/dustmaps'):
 
 
 def get_ebv(ra, dec, map_name='csfd'):
+    from dustmaps.sfd import SFDQuery
+    from dustmaps.csfd import CSFDQuery
     assert map_name in ['sfd', 'csfd'], "Map name not recognized!"
     fetch_dustmap(map_name=map_name) #will only fetch if not already fetched
     if map_name=='sfd':
@@ -503,24 +503,24 @@ unit2latex_dict = {'mas yr-1': 'mas yr$^{-1}$',
                    'None': ''}
 
 # checked ref_epoch for some sources, all 2016
-label2description_dict = {'source_id': '\emph{Gaia} DR3 source identifier',
-        'unwise_objid': 'unWISE DR1 source identifier',
-        'redshift_quaia': 'spectrophotometric redshift estimate',
-        'redshift_quaia_err': '$1\sigma$ uncertainty on spectrophotometric redshift estimate',
-        'ra': 'barycentric right ascension of the source in ICRS at 2016.0',
-        'dec': 'barycentric declination $\delta$ of the source in ICRS at 2016.0', 
-        'l': 'galactic longitude',
-        'b': 'galactic latitude',
-        'phot_g_mean_mag': '\emph{Gaia} $G$-band mean magnitude',
-        'phot_bp_mean_mag': '\emph{Gaia} integrated $BP$ mean magnitude',
-        'phot_rp_mean_mag': '\emph{Gaia} integrated $RP$ mean magnitude',
-        'mag_w1_vg': 'unWISE $W1$ magnitude',
-        'mag_w2_vg': 'unWISE $W2$ magnitude',
-        'pm': 'total proper motion',
-        'pmra': 'proper motion in right ascension $\mu_{\\alpha*} \equiv \mu_\\alpha \, \mathrm{cos} \, \delta$ of the source in ICRS at 2016.0',
-        'pmdec': 'proper motion in declination $\mu_{\delta}$ of the source in ICRS at 2016.0',
-        'pmra_error': 'standard error of proper motion in right ascension direction',
-        'pmdec_error': 'standard error of proper motion in declination direction',
+label2description_dict = {'source_id': r'\emph{Gaia} DR3 source identifier',
+        'unwise_objid': r'unWISE DR1 source identifier',
+        'redshift_quaia': r'spectrophotometric redshift estimate',
+        'redshift_quaia_err': r'$1\sigma$ uncertainty on spectrophotometric redshift estimate',
+        'ra': r'barycentric right ascension of the source in ICRS at 2016.0',
+        'dec': r'barycentric declination $\delta$ of the source in ICRS at 2016.0', 
+        'l': r'galactic longitude',
+        'b': r'galactic latitude',
+        'phot_g_mean_mag': r'\emph{Gaia} $G$-band mean magnitude',
+        'phot_bp_mean_mag': r'\emph{Gaia} integrated $BP$ mean magnitude',
+        'phot_rp_mean_mag': r'\emph{Gaia} integrated $RP$ mean magnitude',
+        'mag_w1_vg': r'unWISE $W1$ magnitude',
+        'mag_w2_vg': r'unWISE $W2$ magnitude',
+        'pm': r'total proper motion',
+        'pmra': r'proper motion in right ascension $\mu_{\\alpha*} \equiv \mu_\\alpha \, \mathrm{cos} \, \delta$ of the source in ICRS at 2016.0',
+        'pmdec': r'proper motion in declination $\mu_{\delta}$ of the source in ICRS at 2016.0',
+        'pmra_error': r'standard error of proper motion in right ascension direction',
+        'pmdec_error': r'standard error of proper motion in declination direction',
         }
 
 label2format_dict = {'source_id': 'd',
