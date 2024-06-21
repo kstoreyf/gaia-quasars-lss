@@ -74,7 +74,7 @@ def main():
 
 
 
-def run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=None, fac_rand=10,
+def run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=None, fac_rand=1,
         N_rand_target=1000000, overwrite=False):
 
     rng = default_rng(seed=42)
@@ -119,17 +119,19 @@ def indices_for_downsample(rng, probability_accept):
     return idx_keep
 
 
-def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc):
+def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc,
+                         normalize=True):
     map_p = hp.read_map(fn_selfunc)
     print('Sel func min and max:', np.min(map_p), np.max(map_p))
     _, pixel_indices_rand = maps.get_map(NSIDE_map, ra, dec)
     p_rand = map_p[pixel_indices_rand]
-    assert np.all(p_rand>=0) and np.all(p_rand<=1), "Bad probability vals!" 
+    p_rand /= np.max(p_rand)
+    #assert np.all(p_rand>=0) and np.all(p_rand<=1), "Bad probability vals!" 
     idx_keep = indices_for_downsample(rng, p_rand)
     print(f"Subsampling by {np.sum(idx_keep)/len(idx_keep):.3f} for probability map")
     return ra[idx_keep], dec[idx_keep]
 
 
 if __name__=='__main__':
-    main()
-    #parse_args()
+    #main()
+    parse_args()

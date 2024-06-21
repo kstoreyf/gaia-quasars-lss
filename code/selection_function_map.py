@@ -34,11 +34,19 @@ def parse_args():
     parser=argparse.ArgumentParser(description="make selection function map for input catalog")
     parser.add_argument("fn_catalog", type=str)
     parser.add_argument("fn_selfunc", type=str)
-    parser.add_argument("fn_parentcat", type=str, nargs='?', default=None)
+    parser.add_argument("-p", "--fn_parentcat", type=str, nargs='?', default=None)
+    parser.add_argument('-m','--maps', nargs='*', help="list of maps, from: ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise', 'zodi1.25', 'zodi3.4', 'zodi4.6']")
+    parser.add_argument('--inputs_are_maps', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--tiny_test', action=argparse.BooleanOptionalAction, default=False)
+    # dust stars m10 mcs unwise unwisescan mcsunwise zodi1.25 zodi3.4 zodi4.6
     args=parser.parse_args()
 
-    print(f"Running selection function with fn_catalog={args.fn_catalog}, fn_selfunc={args.fn_selfunc}, fn_parentcat={args.fn_parentcat}")
-    run(args.fn_catalog, args.fn_selfunc, fn_parentcat=args.fn_parentcat)
+    print(f"Running selection function with fn_catalog={args.fn_catalog}, fn_selfunc={args.fn_selfunc}, fn_parentcat={args.fn_parentcat}, map_names={args.maps}")
+    run(args.fn_catalog, args.fn_selfunc, fn_parentcat=args.fn_parentcat,
+        map_names=args.maps,
+        inputs_are_maps=args.inputs_are_maps,
+        tiny_test=args.tiny_test,
+        )
 
 
 def main():
@@ -82,7 +90,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise'], 
         fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson', 
-        pixels_to_fit_mode='nonzero', fn_parentcat=None,
+        pixels_to_fit_mode='nonzero', fn_parentcat=None, 
+        inputs_are_maps=False, tiny_test=True,
         fit_mean=True, overwrite_ypred=False, overwrite_selfunc=True):
 
     start = time.time()
@@ -92,17 +101,54 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         sys.exit(f"y_pred {fn_ypred} exists and overwrite_ypred is {overwrite_ypred}, and selection function {fn_selfunc} exists and overwrite is {overwrite_selfunc}, so exiting")
 
     print("Loading data", flush=True)
-    tab_gaia = utils.load_table(fn_gaia)
+    null_val = 0
+    if inputs_are_maps:
+        map_nqso_data = hp.read_map(fn_gaia)
+        #map_nqso_data[i_nan] = null_val
+    else:
+        tab_gaia = utils.load_table(fn_gaia)
+        map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
+    
+    if 'quaia' in fn_gaia:
+        if map_names is None:
+            map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
+        log_init_guesses = {'dust': -0.5,
+                        'stars': 1.5,
+                        'm10': -1,
+                        'mcs': 5,
+                        'unwise': 0.8,
+                        'unwisescan': 0,
+                        'mcsunwise': 10,
+                        'zodi1.25': 1, #untested!
+                        'zodi3.4': 1, #untested!
+                        'zodi4.6': 1, #untested!
+                        }
+    elif 'catwise' in fn_gaia:
+        if map_names is None:
+            map_names = ['dust', 'unwise', 'unwisescan']
+        log_init_guesses = {'dust': -5.0,
+                        'unwise': -3.0,
+                        'unwisescan': -3.0,
+                        'mcsunwise': 10.0,
+                        'zodi3.4': 10.0,
+                        'zodi4.6': -5.0,
+                        }
+    else:
+        log_init_guesses = None
+
     print("Making QSO map", flush=True)
+    print("Map templates:", map_names, flush=True)
     maps_forsel = load_maps(NSIDE, map_names)
 
-    map_nqso_data, _ = maps.get_map(NSIDE, tab_gaia['ra'], tab_gaia['dec'], null_val=0)
     y_train_full = map_nqso_data
     # need this because will be inserting small vals where zero
     y_train_full = y_train_full.astype(float)
-    i_nonzero = y_train_full > 0
-
+    i_keep = (y_train_full > 0) & ~np.isnan(y_train_full)
+    # TODO this i_nonzero is used to determine where to predict the selfunc; for case with
+    # reading in map and having nans, decide what to do! (think now it won't bc nans are not >0?)
+    
     if os.path.exists(fn_ypred) and not overwrite_ypred:
+        print(f"y_pred map exists and overwrite_ypred={overwrite_ypred}, reading in from", fn_ypred)
         y_pred_full = hp.read_map(fn_ypred)
     else:
 
@@ -119,12 +165,15 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
             idx_fit = np.full(len(y_train_full), True)
             print('min post', np.min(y_train_full), flush=True)
         elif pixels_to_fit_mode=='nonzero' :
-            idx_fit = i_nonzero
+            idx_fit = i_keep
         elif pixels_to_fit_mode=='okay':
             i_okay = get_okay_pixels(map_nqso_data, map_names, maps_forsel)
-            idx_fit = i_nonzero & i_okay
+            idx_fit = i_keep & i_okay
         else:
             raise ValueError(f'mode {pixels_to_fit_mode} not recognized!')
+
+        # we def dont want to fit nans (right now only matters if inputs_are_maps=True)
+        #idx_fit = idx_fit & ~np.isnan(y_train_full)
 
         # poisson: standard dev = sqrt(N) [so var = N]
         if y_err_mode=='poisson':
@@ -136,11 +185,9 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
             raise ValueError(f'mode {y_err_mode} not recognized!')
 
         #FOR TESTING PURPOSES ONLY
-        # print("TINY TEST")
-        # idx_fit[100:] = False
-        # print("THIRD TEST")
-        # idx_fit[0::3] = False
-        # idx_fit[1::3] = False
+        if tiny_test:
+            print("TINY TEST")
+            idx_fit[50:] = False
 
         X_train = X_train_full[idx_fit]
         y_train = y_train_full[idx_fit]
@@ -156,7 +203,7 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
                     'GP': FitterGP}
         fitter_class = fitter_dict[fitter_name]
         fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
-                        fit_mean=fit_mean,
+                        fit_mean=fit_mean, log_init_guesses=log_init_guesses,
                         x_scale_name=x_scale_name, y_scale_name=y_scale_name,
                         map_names=map_names)
         fitter.train()
@@ -167,11 +214,15 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         print(f"Saving ypred map to {fn_ypred}")
         hp.write_map(fn_ypred, y_pred_full, overwrite=overwrite_ypred)
 
-    print('RMSE:', utils.compute_rmse(y_pred_full, y_train_full), flush=True)
+    print("y_pred_full:", y_pred_full)
+    print(np.sum(np.isnan(y_pred_full)))
+
+    print('RMSE:', utils.compute_rmse(y_pred_full[i_keep], y_train_full[i_keep]), flush=True)
 
     if not os.path.exists(fn_selfunc) or overwrite_selfunc:
         print("Making selection function map", flush=True)
-        map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel, NSIDE=NSIDE, i_keep=i_nonzero, fn_parentcat=fn_parentcat)
+        map_prob = map_expected_to_probability(y_pred_full, y_train_full, map_names, maps_forsel, NSIDE=NSIDE, i_keep=i_keep, fn_parentcat=fn_parentcat)
+        print("map_prob:", map_prob)
 
         hp.write_map(fn_selfunc, map_prob, overwrite=overwrite_selfunc)
         print(f"Saved map to {fn_selfunc}!", flush=True)
@@ -225,13 +276,14 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel,
             idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be (semi?-)redundant w stars
         elif map_name=='mcsunwise':
             idx_map = map < 1 #mcs map has 0s where no mcs, tho this should be (semi?-)redundant w unwise
-        idx_clean = idx_clean & idx_map
+        elif 'zodi' in map_name:
+            idx_map = map < 0.8 # TODO check this is making sense!
+        idx_clean = idx_clean & idx_map & ~np.isnan(map_true)
     print("Number of clean healpixels:", np.sum(idx_clean), f"(Total: {len(map_expected)})")
     nqso_clean = np.mean(map_true[idx_clean])
     # 2 standard deviations above should mean that most, if not all, values are below 1
     nqso_max = nqso_clean + 2*np.std(map_true[idx_clean])
     map_prob = map_expected / nqso_max
-
     if fn_parentcat is not None:
         print("Using parent catalog to determine zero-probability pixels")
         print("(If i_keep also passed, will be ignored!)")
@@ -241,7 +293,6 @@ def map_expected_to_probability(map_expected, map_true, map_names, maps_forsel,
 
     if i_keep is not None:
         map_prob[~i_keep] = 0.0
-
     # it's alright if vals go above 1, it's just a rescaling, but with 2*std none of our fiducial catalogs have >1 vals
     print(f"min: {np.min(map_prob)}, max: {np.max(map_prob)}")
     return map_prob
@@ -257,11 +308,26 @@ def load_maps(NSIDE, map_names):
                      'unwise': maps.get_unwise_map,
                      'unwisescan': maps.get_unwise_scan_map,
                      'mcsunwise': maps.get_mcsunwise_map,
+                     'zodi1.25': maps.get_zodi_map,
+                     'zodi3.4': maps.get_zodi_map,
+                     'zodi4.6': maps.get_zodi_map,
                      }
+
+    map_kwargs = {'stars': {},
+                    'dust': {},
+                    'm10': {},
+                    'mcs': {},
+                    'unwise': {},
+                    'unwisescan': {},
+                    'mcsunwise': {},
+                    'zodi1.25': {'wavelength_str':'1.25'},
+                    'zodi3.4': {'wavelength_str':'3.40'},
+                    'zodi4.6': {'wavelength_str':'4.60'},
+                    }
 
     for map_name in map_names:
         fn_map = f'../data/maps/map_{map_name}_NSIDE{NSIDE}.npy'
-        maps_forsel.append( map_functions[map_name](NSIDE=NSIDE, fn_map=fn_map) )
+        maps_forsel.append( map_functions[map_name](NSIDE=NSIDE, fn_map=fn_map, **map_kwargs[map_name]) )
     return maps_forsel
 
 
@@ -291,11 +357,16 @@ def f_unwise(map_u):
 def f_unwisescan(map_us):
     return np.log(map_us)
 
+
 def f_mcsunwise(map_mcsu):
     map_mcsu = map_mcsu.astype(float)
     i_zeroorneg = map_mcsu < 1e-4
     map_mcsu[i_zeroorneg] = 1e-4
     return np.log(map_mcsu)
+
+
+def f_zodi(map_z):
+    return map_z
 
 
 def construct_X(NPIX, map_names, maps_forsel, fitter_name):
@@ -306,6 +377,9 @@ def construct_X(NPIX, map_names, maps_forsel, fitter_name):
              'unwise': f_unwise,
              'unwisescan': f_unwisescan,
              'mcsunwise': f_mcsunwise,
+             'zodi1.25': f_zodi,
+             'zodi3.4': f_zodi,
+             'zodi4.6': f_zodi,
              }
     X = np.vstack([f_dict[map_name](map) for map_name, map in zip(map_names, maps_forsel)])
     print(X.shape)
@@ -400,27 +474,32 @@ class Fitter():
 
 
 class FitterGP(Fitter):
-    def __init__(self, *args, fit_mean=False, **kwargs):
+    def __init__(self, *args, fit_mean=False, log_init_guesses=None, **kwargs):
         super().__init__(*args, **kwargs)
         print("fit_mean =", fit_mean)
         self.fit_mean = fit_mean
-
-
-    def train(self):
-        ndim = self.X_train.shape[1]
-        n_params = self.X_train_scaled.shape[1]
-        print("n params:", n_params)
-        #based on previous optimizations (G20.0 most recently)
-        log_init_guesses = {'dust': -0.5,
+        if log_init_guesses is None:
+            #based on previous optimizations (G20.0 most recently)
+            log_init_guesses = {'dust': -0.5,
                         'stars': 1.5,
                         'm10': -1,
                         'mcs': 5,
                         'unwise': 0.8,
                         'unwisescan': 0,
                         'mcsunwise': 10,
+                        'zodi1.25': 1, #untested!
+                        'zodi3.4': 1, #untested!
+                        'zodi4.6': 1, #untested!
                         }
+        self.log_init_guesses = log_init_guesses
+
+
+    def train(self):
+        ndim = self.X_train.shape[1]
+        n_params = self.X_train_scaled.shape[1]
+        print("n params:", n_params)
         if self.map_names is not None:
-            log_p0 = np.array([log_init_guesses[map_name] for map_name in self.map_names]) 
+            log_p0 = np.array([self.log_init_guesses[map_name] for map_name in self.map_names]) 
         else:
             log_p0 = np.full(0.1, n_params)
         p0 = np.exp(log_p0)
@@ -514,7 +593,7 @@ class FitterLinear(Fitter):
 
 
 if __name__=='__main__':
-    main()
-    #parse_args()
+    #main()
+    parse_args()
 
 

@@ -18,17 +18,17 @@ def main():
     #     merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
     # ### Make public-facing catalog
-    tag_qspec = ''
+    #tag_qspec = ''
     #tag_cat = '_mags-0.05'
-    tag_cat = ''
-    G_maxs = [20.0, 20.5]
-    for G_max in G_maxs:
-        make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
+    #tag_cat = ''
+    #G_maxs = [20.0, 20.5]
+    #for G_max in G_maxs:
+    #    make_public_catalog(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
     # ### Make redshift-split catalogs
-    # G_max = 20.5
-    # n_zbins = 2
-    # make_redshift_split_catalogs(G_max, n_zbins)
+    G_max = 20.5
+    n_zbins = 4
+    make_redshift_split_catalogs(G_max, n_zbins)
 
     ### Make redshift-split catalogs for CIB analysis by Giulia
     # G_max = 20.5
