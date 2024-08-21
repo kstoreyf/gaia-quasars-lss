@@ -3,18 +3,24 @@ from astropy.table import Table
 
 
 G_str = '20.5'
-tag = ''
-#tag = '_minimal'
-fn_txt = f'../data/quaia_G{G_str}{tag}.txt'
-fn_gcat = f'../data/quaia_G{G_str}.fits'
+#tag = ''
+tag = '_minimal'
+#fn_txt = f'../data/quaia_G{G_str}{tag}.txt'
+#fn_gcat = f'../data/quaia_G{G_str}.fits'
+fn_txt = f'../data/mock_quaia_G{G_str}{tag}.txt'
+fn_gcat = f'../data/mock_quaia_G{G_str}.fits'
 tab = Table.read(fn_gcat)
 print(tab.columns)
 
 #columns = ['source_id', 'l', 'b', 'redshift_quaia', 'redshift_quaia_err', 'phot_g_mean_mag']
 if 'minimal' in tag:
-    columns = ['l', 'b', 'redshift_quaia', 'redshift_quaia_err', 'phot_g_mean_mag']
-    precisions = [14, 14, 7, 7, 6]
-    widths = [18, 18, 8, 8, 7]
+    columns = ['l', 'b', 'redshift_quaia', 'redshift_quaia_err']
+    precisions = [14, 14, 7, 7]
+    widths = [18, 18, 8, 8]
+    if 'mock' not in fn_gcat:
+        columns.append('phot_g_mean_mag')
+        precisions.append(6)
+        widths.append(7)
     fmts = [f'%{widths[i]}.{precisions[i]}f' for i in range(len(columns))]
 else:
     columns = list(tab.columns)
@@ -52,7 +58,8 @@ else:
 
 #data = np.array([np.array(tab[col]) for col in columns]).T
 tab = tab[columns]
-tab['unwise_objid'] = np.char.decode(tab['unwise_objid'])
+if 'unwise_objid' in tab.columns:
+    tab['unwise_objid'] = np.char.decode(tab['unwise_objid'])
 data = np.array(tab.as_array())
 #subset for testing
 #data = data[np.random.choice(np.arange(len(data)), size=10, replace=False)]
