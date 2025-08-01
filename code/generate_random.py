@@ -135,5 +135,5 @@ def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc,
 
 
 if __name__=='__main__':
-    main()
-    #parse_args()
+    #main()
+    parse_args()
