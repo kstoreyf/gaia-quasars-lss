@@ -6,7 +6,7 @@ import utils
 
 
 def main():
-    overwrite = True
+    overwrite = False
 
     ### Make catalogs with G-cut and redshifts
     # tag_qspec = ''
@@ -38,12 +38,18 @@ def main():
     # make_redshift_split_catalogs(G_max, z_bins=z_bins, save_tag='CIB')
 
     ### Make redshift-split catalogs for autocorr-dutycycle analysis by christina eilers & mariona
-    G_max = 20.5
+    #G_max = 20.5
     #z_bins = [0.0,1.0,2.0,3.0,4.0]
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
-    z_bins = [2.9,3.5,5.0]
-    make_redshift_split_catalogs(G_max, z_bins=z_bins)
+    #z_bins = [2.9,3.5,5.0]
+    #make_redshift_split_catalogs(G_max, z_bins=z_bins)
+    #z_bins = [0.8,1.2] #Shen+07 bin, most data
+    #make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
+    ### For Paul quaia-desi comparison
+    G_max = 20.5
+    z_bins = [0.8,2.1] #desi qso range
+    make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
 def merge_gaia_spzs_and_cutGmax(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
 
@@ -118,7 +124,7 @@ def make_redshift_split_catalogs(G_max, n_zbins=None, z_bins=None, overwrite=Tru
     if z_bins is not None and n_zbins is not None:
         print("z_bins passed, ignoring n_zbins")
     if z_bins is not None:
-        n_zbins = len(z_bins)
+        n_zbins = len(z_bins)-1
         print(f"z_bins: {z_bins}, setting n_zbins={n_zbins}")
 
     fn_gcat = f'../data/quaia_G{G_max}.fits'
@@ -131,7 +137,6 @@ def make_redshift_split_catalogs(G_max, n_zbins=None, z_bins=None, overwrite=Tru
         z_bins[-1] += 0.01 # add a bit to maximum bin to make sure the highest-z source gets included
         z_bins[0] -= 0.01 # add a bit to minimum bin to make sure the lowest-z source gets included
 
-    n_zbins = len(z_bins)-1
     print("zbins:", z_bins)
     print("n_zbins:", n_zbins)
 
