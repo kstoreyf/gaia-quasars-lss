@@ -54,9 +54,9 @@ def main():
 
     G_max = 20.5
     #tag_cat = '_qeboss'
-    tag_cat = ''
-    tag_sel = '_allsky'
-
+    tag_cat = '_zsplit2bin0'
+    tag_sel = ''
+    #tag_sel = '_allsky'
     fac_rand = 10
     NSIDE_map = 64
 
@@ -66,10 +66,11 @@ def main():
     #fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x_retry.fits'
 
     #fn_selfunc = f'../data/maps/selfunc_test.fits'
-    fn_selfunc = f'../data/maps/selection_function_NSIDE64_ones.fits'
+    #fn_selfunc = f'../data/maps/selection_function_NSIDE64_ones.fits'
+    fn_selfunc = f'../data/maps/selection_function_NSIDE64_G{G_max}{tag_cat}{tag_sel}.fits'
     #fn_rand = f'../data/randoms/random_test.fits'
     fn_rand = f'../data/randoms/random_G{G_max}{tag_cat}{tag_sel}_{fac_rand}x.fits'
-    overwrite = True
+    overwrite = False
 
     run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_gaia,
         fac_rand=fac_rand, overwrite=overwrite)
@@ -135,5 +136,5 @@ def subsample_by_probmap(NSIDE_map, rng, ra, dec, fn_selfunc,
 
 
 if __name__=='__main__':
-    #main()
-    parse_args()
+    main()
+    #parse_args()
