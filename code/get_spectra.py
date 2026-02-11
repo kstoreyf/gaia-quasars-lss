@@ -21,8 +21,8 @@ from astroquery.gaia import Gaia
 
 # Default spectrum type: XP_SAMPLED gives flux vs wavelength; XP_CONTINUOUS gives coefficients
 #DEFAULT_SPECTRUM_TYPE = "XP_CONTINUOUS"
-#DEFAULT_SPECTRUM_TYPE = "gaiaxpy_calibrated"
-DEFAULT_SPECTRUM_TYPE = "XP_SAMPLED"
+DEFAULT_SPECTRUM_TYPE = "gaiaxpy_calibrated"
+#DEFAULT_SPECTRUM_TYPE = "XP_SAMPLED"
 DEFAULT_BATCH_SIZE = 1000
 DEFAULT_SLEEP_S = 5
 
@@ -182,53 +182,53 @@ def _fetch_batch_gaiaxpy(batch_ids, save_file=False):
     gaiaxpy.convert returns a DataFrame with columns: source_id, xp (BP|RP), flux, flux_error.
     One row per band per source (2N rows for N sources). We pivot to get flux_bp, flux_rp.
     """
-    try:
-        from gaiaxpy import convert
-        import pandas as pd
+    #try:
+    from gaiaxpy import convert
+    import pandas as pd
 
-        converted, sampling = convert(
-            list(batch_ids),
-            save_file=save_file,
-        )
-        if not isinstance(converted, pd.DataFrame) or len(converted) == 0:
-            return None
-        df = converted
-        # gaiaxpy returns: source_id, xp (BP|RP), flux, flux_error
-        if "xp" not in df.columns or "flux" not in df.columns:
-            return None
-        src_col = "source_id" if "source_id" in df.columns else next(
-            (c for c in df.columns if "source" in c.lower() and "id" in c.lower()), None
-        )
-        if src_col is None:
-            return None
-
-        # Pivot: BP rows -> flux_bp, RP rows -> flux_rp (one row per source)
-        bp_rows = df["xp"].str.upper() == "BP"
-        rp_rows = df["xp"].str.upper() == "RP"
-        if not (bp_rows.any() and rp_rows.any()):
-            return None
-
-        df_bp = df[bp_rows].sort_values(src_col)
-        df_rp = df[rp_rows].sort_values(src_col)
-        source_ids = np.asarray(df_bp[src_col], dtype=np.int64)
-        if not np.array_equal(source_ids, np.asarray(df_rp[src_col], dtype=np.int64)):
-            return None
-
-        flux_bp = np.array([np.asarray(x) for x in df_bp["flux"]])
-        flux_rp = np.array([np.asarray(x) for x in df_rp["flux"]])
-        wave = np.asarray(sampling, dtype=np.float64) if sampling is not None else np.arange(
-            flux_bp.shape[1], dtype=np.float64
-        )
-        return {
-            "source_id": source_ids,
-            "flux_bp": np.atleast_2d(flux_bp),
-            "flux_rp": np.atleast_2d(flux_rp),
-            "wave_bp": wave,
-            "wave_rp": wave,
-            "is_coefficients": False,
-        }
-    except Exception:
+    converted, sampling = convert(
+        list(batch_ids),
+        save_file=save_file,
+    )
+    if not isinstance(converted, pd.DataFrame) or len(converted) == 0:
         return None
+    df = converted
+    # gaiaxpy returns: source_id, xp (BP|RP), flux, flux_error
+    if "xp" not in df.columns or "flux" not in df.columns:
+        return None
+    src_col = "source_id" if "source_id" in df.columns else next(
+        (c for c in df.columns if "source" in c.lower() and "id" in c.lower()), None
+    )
+    if src_col is None:
+        return None
+
+    # Pivot: BP rows -> flux_bp, RP rows -> flux_rp (one row per source)
+    bp_rows = df["xp"].str.upper() == "BP"
+    rp_rows = df["xp"].str.upper() == "RP"
+    if not (bp_rows.any() and rp_rows.any()):
+        return None
+
+    df_bp = df[bp_rows].sort_values(src_col)
+    df_rp = df[rp_rows].sort_values(src_col)
+    source_ids = np.asarray(df_bp[src_col], dtype=np.int64)
+    if not np.array_equal(source_ids, np.asarray(df_rp[src_col], dtype=np.int64)):
+        return None
+
+    flux_bp = np.array([np.asarray(x) for x in df_bp["flux"]])
+    flux_rp = np.array([np.asarray(x) for x in df_rp["flux"]])
+    wave = np.asarray(sampling, dtype=np.float64) if sampling is not None else np.arange(
+        flux_bp.shape[1], dtype=np.float64
+    )
+    return {
+        "source_id": source_ids,
+        "flux_bp": np.atleast_2d(flux_bp),
+        "flux_rp": np.atleast_2d(flux_rp),
+        "wave_bp": wave,
+        "wave_rp": wave,
+        "is_coefficients": False,
+    }
+    # except Exception:
+    #     return None
 
 
 def _fetch_batch_gaiaxpy_calibrated(batch_ids):
@@ -240,42 +240,41 @@ def _fetch_batch_gaiaxpy_calibrated(batch_ids):
     and a sampling wavelength array. The flux is a combined calibrated spectrum.
     Since the HDF5 structure expects separate BP and RP, we store the same flux in both.
     """
-    try:
-        from gaiaxpy import calibrate
-        import pandas as pd
+    from gaiaxpy import calibrate
+    import pandas as pd
 
-        calibrated_spectra, sampling = calibrate(list(batch_ids), save_file=False)
-        if not isinstance(calibrated_spectra, pd.DataFrame) or len(calibrated_spectra) == 0:
-            return None
-        df = calibrated_spectra
-        
-        # gaiaxpy.calibrate returns: source_id, flux, flux_error
-        if "flux" not in df.columns:
-            return None
-        src_col = "source_id" if "source_id" in df.columns else next(
-            (c for c in df.columns if "source" in c.lower() and "id" in c.lower()), None
-        )
-        if src_col is None:
-            return None
-
-        source_ids = np.asarray(df[src_col], dtype=np.int64)
-        flux = np.array([np.asarray(x) for x in df["flux"]])
-        wave = np.asarray(sampling, dtype=np.float64) if sampling is not None else np.arange(
-            flux.shape[1], dtype=np.float64
-        )
-        
-        # Store the same calibrated flux in both BP and RP slots
-        # since calibrate returns a combined spectrum
-        return {
-            "source_id": source_ids,
-            "flux_bp": np.atleast_2d(flux),
-            "flux_rp": np.atleast_2d(flux),
-            "wave_bp": wave,
-            "wave_rp": wave,
-            "is_coefficients": False,
-        }
-    except Exception:
+    calibrated_spectra, sampling = calibrate(list(batch_ids), save_file=False)
+    if not isinstance(calibrated_spectra, pd.DataFrame) or len(calibrated_spectra) == 0:
         return None
+    df = calibrated_spectra
+
+    # gaiaxpy.calibrate returns: source_id, flux, flux_error
+    if "flux" not in df.columns:
+        return None
+    src_col = "source_id" if "source_id" in df.columns else next(
+        (c for c in df.columns if "source" in c.lower() and "id" in c.lower()), None
+    )
+    if src_col is None:
+        return None
+
+    source_ids = np.asarray(df[src_col], dtype=np.int64)
+    flux = np.array([np.asarray(x) for x in df["flux"]])
+    wave = np.asarray(sampling, dtype=np.float64) if sampling is not None else np.arange(
+        flux.shape[1], dtype=np.float64
+    )
+
+    # Store the same calibrated flux in both BP and RP slots
+    # since calibrate returns a combined spectrum
+    return {
+        "source_id": source_ids,
+        "flux_bp": np.atleast_2d(flux),
+        "flux_rp": np.atleast_2d(flux),
+        "wave_bp": wave,
+        "wave_rp": wave,
+        "is_coefficients": False,
+    }
+    # except Exception:
+    #     return None
 
 
 def parse_datalink_spectra_to_arrays(datalink_result):
@@ -523,9 +522,11 @@ def run(
             parsed = None
             if spectrum_type == "gaiaxpy_calibrated":
                 parsed = _fetch_batch_gaiaxpy_calibrated(batch)
+                # Do not fall back to Gaia.load_data: retrieval_type must be a Gaia product
+                # (e.g. XP_CONTINUOUS, XP_SAMPLED), not "gaiaxpy_calibrated".
             elif spectrum_type == "XP_CONTINUOUS":
                 parsed = _fetch_batch_gaiaxpy(batch)
-            if parsed is None:
+            if parsed is None and spectrum_type in ("XP_CONTINUOUS", "XP_SAMPLED"):
                 datalink = Gaia.load_data(
                     ids=batch,
                     data_release="Gaia DR3",
@@ -541,9 +542,11 @@ def run(
                 batch_time = time.time() - batch_start_time
                 print(f"appended {n_added} spectra. (batch time: {batch_time:.2f}s)")
             else:
-                # If parser didn't recognise format, try storing raw table as a single batch table
                 batch_time = time.time() - batch_start_time
-                print(f"(parser could not extract arrays; check spectrum_type and Gaia product format) (batch time: {batch_time:.2f}s)")
+                if spectrum_type == "gaiaxpy_calibrated":
+                    print(f"gaiaxpy.calibrate failed for this batch (check gaiaxpy install and archive access) (batch time: {batch_time:.2f}s)")
+                else:
+                    print(f"(parser could not extract arrays; check spectrum_type and Gaia product format) (batch time: {batch_time:.2f}s)")
         except Exception as e:
             batch_time = time.time() - batch_start_time
             print(f"Error: {e} (batch time: {batch_time:.2f}s)")
@@ -620,7 +623,8 @@ if __name__ == "__main__":
             suffix = "continuous"
         else:
             raise ValueError(f"Invalid spectrum type: {args.spectrum_type}")
-        args.output = f"../data/quaia_xp_spectra_{suffix}.h5"
+        #args.output = f"../data/quaia_xp_spectra_{suffix}.h5"
+        args.output = f"../data/quaia_x_dr16_prop_xp_spectra_{suffix}.h5"
     run(
         fn_quaia=args.quaia,
         fn_output=args.output,
