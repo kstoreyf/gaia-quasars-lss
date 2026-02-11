@@ -51,7 +51,10 @@ def parse_args():
 
 
 def main():
+    #run_single()
+    run_loop()
 
+def run_single():
     G_max = 20.5
     #tag_cat = '_qeboss'
     tag_cat = '_zsplit2bin0'
@@ -75,6 +78,21 @@ def main():
     run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_gaia,
         fac_rand=fac_rand, overwrite=overwrite)
 
+
+def run_loop():
+    G_max = 20.5
+    #tags_quaia = ['_zmin0.0zmax1.0', '_zmin1.0zmax2.0', '_zmin2.0zmax3.0', '_zmin3.0zmax4.0']
+    #tags_quaia = ['_zmin0.0zmax1.0']
+    tags_quaia = ['_zsplit6bin0CIB','_zsplit6bin1CIB','_zsplit6bin2CIB','_zsplit6bin3CIB','_zsplit6bin4CIB','_zsplit6bin5CIB']
+    fac_rand = 10
+    NSIDE_map = 64
+    overwrite = False
+    for tag_quaia in tags_quaia:
+        fn_quaia = f'../data/quaia_G{G_max}{tag_quaia}.fits'
+        fn_selfunc = f'../data/maps/selection_function_NSIDE64_G{G_max}{tag_quaia}.fits'
+        fn_rand = f'../data/randoms/random_G{G_max}{tag_quaia}_{fac_rand}x.fits'
+        run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_quaia,
+            fac_rand=fac_rand, overwrite=overwrite)
 
 
 def run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=None, fac_rand=1,

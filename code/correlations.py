@@ -121,11 +121,12 @@ def add_xyz(tab):
 def compute_wtheta(theta_edges, ra, dec, ra_rand, dec_rand,
                    return_full_results=False, nthreads=4):
         
+    start_total = time.time()
     autocorr = 1
     start = time.time()
     DD_theta = DDtheta_mocks(autocorr, nthreads, theta_edges, ra, dec)
     end = time.time()
-    print(f'Time: {end-start:.4f} s')
+    print(f'DD theta time: {end-start:.4f} s')
     
     autocorr = 0
     start = time.time()
@@ -133,19 +134,22 @@ def compute_wtheta(theta_edges, ra, dec, ra_rand, dec_rand,
                                ra, dec,
                                RA2=ra_rand, DEC2=dec_rand)
     end = time.time()
-    print(f'Time: {end-start:.4f} s')
+    print(f'DR theta time: {end-start:.4f} s')
     
     start = time.time()
     autocorr = 1
     RR_theta = DDtheta_mocks(autocorr, nthreads, theta_edges, ra_rand, dec_rand)
     end = time.time()
-    print(f'Time: {end-start:.4f} s')
+    print(f'RR theta time: {end-start:.4f} s')
     
     N = len(ra)
     N_rand = len(ra_rand)
     wtheta = convert_3d_counts_to_cf(N, N, N_rand, N_rand,
                                  DD_theta, DR_theta,
                                  DR_theta, RR_theta)
+                                 
+    end_total = time.time()
+    print(f'Total theta time: {end_total-start_total:.4f} s')
     
     if return_full_results:
         return wtheta, DD_theta, DR_theta, RR_theta

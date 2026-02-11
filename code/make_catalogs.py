@@ -1,6 +1,8 @@
 import numpy as np
 
+from astropy import units as u
 from astropy.table import Table, join
+from astropy.coordinates import SkyCoord
 
 import utils
 
@@ -40,6 +42,7 @@ def main():
     ### Make redshift-split catalogs for autocorr-dutycycle analysis by christina eilers & mariona
     #G_max = 20.5
     #z_bins = [0.0,1.0,2.0,3.0,4.0]
+    #z_bins = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
     #z_bins = [2.9,3.5,5.0]
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
@@ -47,9 +50,11 @@ def main():
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
     ### For Paul quaia-desi comparison
-    G_max = 20.5
-    z_bins = [0.8,2.1] #desi qso range
-    make_redshift_split_catalogs(G_max, z_bins=z_bins)
+    # G_max = 20.5
+    # z_bins = [0.8,2.1] #desi qso range
+    # make_redshift_split_catalogs(G_max, z_bins=z_bins)
+
+    #crossmatch_quaia_sdss_dr16q_prop()
 
 def merge_gaia_spzs_and_cutGmax(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
 
@@ -114,6 +119,56 @@ def make_public_catalog(G_max=20.5, tag_qspec='', tag_cat='', overwrite=False):
     print(tab_public.columns)
     tab_public.write(fn_public, overwrite=overwrite)
     print(f"Wrote table with {len(tab_public)} objects to {fn_public}")
+
+
+def _to_deg(col):
+    """Convert column to plain degree array (handles Quantity, masked, etc.)."""
+    data = col.data if hasattr(col, 'mask') else col
+    a = np.asarray(data)
+    if hasattr(a, 'to'):
+        a = a.to(u.deg).value
+    elif hasattr(a, 'value'):
+        a = np.asarray(a.value)
+    a = np.asarray(a, dtype=float)
+    if hasattr(col, 'mask') and np.any(col.mask):
+        a = np.where(col.mask, np.nan, a)
+    return a
+
+
+def crossmatch_quaia_sdss_dr16q_prop(G_max=20.5, match_radius_arcsec=1.0, overwrite=False):
+    """
+    Cross-match QUaIA G{G_max} with SDSS DR16Q (sky position), keep matches within
+    match_radius_arcsec. Save an astropy table with columns: source_id (QUaIA),
+    sdss_objid (SDSS OBJID from DR16Q).
+    """
+    fn_quaia = f'../data/quaia_G{G_max}.fits'
+    fn_dr16q = '../data/dr16q_prop_May01_2024.fits.gz'
+    fn_out = f'../data/match_quaia_G{G_max}_sdss_dr16q_prop.fits'
+
+    tab_quaia = utils.load_table(fn_quaia)
+    tab_dr16q = Table.read(fn_dr16q, hdu=1)
+
+    ra_quaia = _to_deg(tab_quaia['ra'])
+    dec_quaia = _to_deg(tab_quaia['dec'])
+    ra_dr16 = _to_deg(tab_dr16q['RA'] if 'RA' in tab_dr16q.colnames else tab_dr16q['PLUG_RA'])
+    dec_dr16 = _to_deg(tab_dr16q['DEC'] if 'DEC' in tab_dr16q.colnames else tab_dr16q['PLUG_DEC'])
+
+    coords_quaia = SkyCoord(ra=ra_quaia * u.deg, dec=dec_quaia * u.deg, frame='icrs')
+    coords_dr16q = SkyCoord(ra=ra_dr16 * u.deg, dec=dec_dr16 * u.deg, frame='icrs')
+
+    idx_quaia, sep2d, _ = coords_dr16q.match_to_catalog_sky(coords_quaia)
+    within = sep2d < match_radius_arcsec * u.arcsec
+
+    quaia_source_id = tab_quaia['source_id'][idx_quaia[within]]
+    sdss_objid = tab_dr16q['OBJID'][within]
+
+    tab_match = Table()
+    tab_match['source_id'] = quaia_source_id
+    tab_match['sdss_objid'] = sdss_objid
+    tab_match.meta['description'] = f'QUaIA G{G_max} × SDSS DR16Q, sep < {match_radius_arcsec} arcsec'
+
+    tab_match.write(fn_out, overwrite=overwrite)
+    print(f"Quaia G{G_max} × SDSS DR16Q: {np.sum(within)} matches within {match_radius_arcsec} arcsec -> {fn_out}")
 
 
 def make_redshift_split_catalogs(G_max, n_zbins=None, z_bins=None, overwrite=True,

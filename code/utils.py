@@ -186,7 +186,9 @@ def get_ebv(ra, dec, map_name='csfd'):
     if map_name=='sfd':
         sfd = SFDQuery()
     elif map_name=='csfd':
+        print("Getting ebv from CSFD")
         sfd = CSFDQuery()
+        print("Done")
     coords = SkyCoord(ra=ra, dec=dec, frame='icrs') 
     ebv_orig = sfd(coords)
     # rescaling correction described in https://arxiv.org/pdf/1009.4933.pdf
