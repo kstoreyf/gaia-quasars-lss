@@ -51,13 +51,14 @@ def parse_args():
 
 
 def main():
-    #run_single()
-    run_loop()
+    run_single()
+    #run_loop()
 
 def run_single():
     G_max = 20.5
     #tag_cat = '_qeboss'
-    tag_cat = '_zsplit2bin0'
+    #tag_cat = '_zsplit2bin0'
+    tag_cat = '_zmin0.8zmax2.1'
     tag_sel = ''
     #tag_sel = '_allsky'
     fac_rand = 10

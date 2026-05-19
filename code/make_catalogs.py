@@ -50,9 +50,9 @@ def main():
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
     ### For Paul quaia-desi comparison
-    # G_max = 20.5
-    # z_bins = [0.8,2.1] #desi qso range
-    # make_redshift_split_catalogs(G_max, z_bins=z_bins)
+    G_max = 20.5
+    z_bins = [0.8,2.1] #desi qso range
+    make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
     #crossmatch_quaia_sdss_dr16q_prop()
 

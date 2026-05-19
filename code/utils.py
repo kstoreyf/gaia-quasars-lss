@@ -270,10 +270,12 @@ def random_ra_dec_on_sphere(rng, N_sphere):
 ### Units
 
 def Mpc_to_Mpcperh(distances_Mpc, cosmo):
+    """Convert comoving distance from Mpc to Mpc/h."""
     return distances_Mpc * cosmo.h
 
 
 def Mpcperh_to_Mpc(distances_Mpcperh, cosmo):
+    """Convert comoving distance from Mpc/h to Mpc."""
     return distances_Mpcperh / cosmo.h
 
 

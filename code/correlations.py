@@ -147,7 +147,7 @@ def compute_wtheta(theta_edges, ra, dec, ra_rand, dec_rand,
     wtheta = convert_3d_counts_to_cf(N, N, N_rand, N_rand,
                                  DD_theta, DR_theta,
                                  DR_theta, RR_theta)
-                                 
+
     end_total = time.time()
     print(f'Total theta time: {end_total-start_total:.4f} s')
     
@@ -156,6 +156,50 @@ def compute_wtheta(theta_edges, ra, dec, ra_rand, dec_rand,
     
     return wtheta
 
+
+def compute_wprp(rp_edges, pimax, ra, dec, z, ra_rand, dec_rand, z_rand,
+                 return_full_results=False, nthreads=4, is_comoving_dist=True):
+
+    cosmology = 2
+
+    start_total = time.time()
+    autocorr = 1
+    start = time.time()
+    DD_rp = DDrppi_mocks(autocorr, cosmology, nthreads, pimax, rp_edges, ra, dec, z, 
+                        is_comoving_dist=is_comoving_dist)
+    end = time.time()
+    print(f'DD rp time: {end-start:.4f} s')
+    
+    autocorr = 0
+    start = time.time()
+    DR_rp = DDrppi_mocks(autocorr, cosmology, nthreads, pimax, rp_edges, ra, dec, z,
+                         RA2=ra_rand, DEC2=dec_rand, CZ2=z_rand,
+                         is_comoving_dist=is_comoving_dist)
+    end = time.time()
+    print(f'DR rp time: {end-start:.4f} s')
+    
+    start = time.time()
+    autocorr = 1
+    RR_rp = DDrppi_mocks(autocorr, cosmology, nthreads, pimax, rp_edges, ra_rand, dec_rand, z_rand,
+                         is_comoving_dist=is_comoving_dist)
+    end = time.time()
+    print(f'RR rp time: {end-start:.4f} s')
+    
+    N = len(ra)
+    N_rand = len(ra_rand)
+    n_rpbins = len(rp_edges)-1
+    wprp = convert_rp_pi_counts_to_wp(N, N, N_rand, N_rand,
+                                     DD_rp, DR_rp,
+                                     DR_rp, RR_rp, n_rpbins, pimax)
+
+    end_total = time.time()
+    print(f'Total rp time: {end_total-start_total:.4f} s')
+    
+    if return_full_results:
+        return wprp, DD_rp, DR_rp, RR_rp
+
+    return wprp
+    
 
 def compute_xi(r_edges, x, y, z, x_rand, y_rand, z_rand,
                return_full_results=False, nthreads=4):
