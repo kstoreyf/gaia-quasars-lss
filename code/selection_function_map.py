@@ -200,7 +200,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
         print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
         fitter_dict = {'linear': FitterLinear,
-                    'GP': FitterGP}
+                    'GP': FitterGP,
+                    'gpytorch_sgpr': FitterGPyTorchSGPR}
         fitter_class = fitter_dict[fitter_name]
         fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
                         fit_mean=fit_mean, log_init_guesses=log_init_guesses,
@@ -557,6 +558,139 @@ class FitterGP(Fitter):
         return self.unscale_y(y_pred_scaled)
 
 
+class FitterGPyTorchSGPR(Fitter):
+    """Sparse (inducing-point) GP regression via GPyTorch.
+
+    Drop-in alternative to FitterGP that scales to ~all NSIDE=64 pixels: cost is
+    O(N * M^2) time and O(N * M) memory for M inducing points, vs the exact GP's
+    O(N^3) / O(N^2). Runs CPU multi-threaded (set OMP_NUM_THREADS / torch threads).
+    """
+
+    def __init__(self, *args, fit_mean=False, log_init_guesses=None,
+                 n_inducing=1024, n_iters=300, lr=0.05, n_threads=None,
+                 pred_batch=8192, verbose=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fit_mean = fit_mean
+        self.log_init_guesses = log_init_guesses
+        self.n_inducing = n_inducing
+        self.n_iters = n_iters
+        self.lr = lr
+        self.n_threads = n_threads
+        self.pred_batch = pred_batch
+        self.verbose = verbose
+        print("fit_mean =", fit_mean)
+
+    def _build_model(self):
+        import torch
+        import gpytorch
+
+        if self.n_threads is not None:
+            torch.set_num_threads(int(self.n_threads))
+        # double precision for GP numerical stability
+        torch.set_default_dtype(torch.float64)
+
+        ndim = self.X_train_scaled.shape[1]
+        train_x = torch.as_tensor(np.ascontiguousarray(self.X_train_scaled), dtype=torch.float64)
+        train_y = torch.as_tensor(np.ascontiguousarray(self.y_train_scaled), dtype=torch.float64)
+
+        # noise: use Poisson y_err (already scaled to log-space if y_scale_name='log')
+        if self.y_err_train_scaled is None:
+            likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        else:
+            noise = torch.as_tensor(np.ascontiguousarray(self.y_err_train_scaled**2), dtype=torch.float64)
+            noise = torch.clamp(noise, min=1e-8)
+            likelihood = gpytorch.likelihoods.FixedNoiseGaussianLikelihood(
+                noise=noise, learn_additional_noise=True)
+
+        # inducing points: random subset of training inputs (in scaled feature space)
+        n_train = train_x.shape[0]
+        m = min(self.n_inducing, n_train)
+        g = torch.Generator().manual_seed(42)
+        idx = torch.randperm(n_train, generator=g)[:m]
+        inducing_points = train_x[idx].clone()
+
+        fit_mean = self.fit_mean
+
+        class _SGPRModel(gpytorch.models.ExactGP):
+            def __init__(self, tx, ty, lik):
+                super().__init__(tx, ty, lik)
+                self.mean_module = gpytorch.means.ConstantMean() if fit_mean else gpytorch.means.ZeroMean()
+                base_kernel = gpytorch.kernels.ScaleKernel(
+                    gpytorch.kernels.RBFKernel(ard_num_dims=ndim))
+                self.covar_module = gpytorch.kernels.InducingPointKernel(
+                    base_kernel, inducing_points=inducing_points, likelihood=lik)
+
+            def forward(self, x):
+                return gpytorch.distributions.MultivariateNormal(
+                    self.mean_module(x), self.covar_module(x))
+
+        model = _SGPRModel(train_x, train_y, likelihood)
+
+        # initialise ARD lengthscales from the george-style log guesses if available
+        if self.map_names is not None and self.log_init_guesses is not None:
+            ls0 = np.sqrt(np.exp(np.array(
+                [self.log_init_guesses[name] for name in self.map_names], dtype=float)))
+            with torch.no_grad():
+                model.covar_module.base_kernel.base_kernel.lengthscale = \
+                    torch.as_tensor(ls0, dtype=torch.float64).clamp(min=1e-3)
+        with torch.no_grad():
+            model.covar_module.base_kernel.outputscale = max(float(np.var(self.y_train_scaled)), 1e-6)
+
+        model.double()
+        likelihood.double()
+        self._torch = torch
+        self._gpytorch = gpytorch
+        self.model = model
+        self.likelihood = likelihood
+        self.train_x = train_x
+        self.train_y = train_y
+
+    def train(self):
+        self._build_model()
+        torch = self._torch
+        gpytorch = self._gpytorch
+
+        self.model.train()
+        self.likelihood.train()
+        mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+
+        print(f"Training SGPR: n_train={self.train_x.shape[0]}, "
+              f"n_inducing={min(self.n_inducing, self.train_x.shape[0])}, "
+              f"ndim={self.train_x.shape[1]}, n_iters={self.n_iters}, "
+              f"threads={torch.get_num_threads()}", flush=True)
+
+        prev = None
+        for i in range(self.n_iters):
+            optimizer.zero_grad()
+            output = self.model(self.train_x)
+            loss = -mll(output, self.train_y)
+            loss.backward()
+            optimizer.step()
+            lossval = loss.item()
+            if self.verbose and (i % 25 == 0 or i == self.n_iters - 1):
+                print(f"  iter {i+1}/{self.n_iters} - neg_ln_like = {lossval:.4f}", flush=True)
+            # simple convergence check on the loss
+            if prev is not None and abs(prev - lossval) < 1e-5:
+                print(f"  converged at iter {i+1} (neg_ln_like = {lossval:.4f})", flush=True)
+                break
+            prev = lossval
+
+    def predict(self, X_pred):
+        torch = self._torch
+        gpytorch = self._gpytorch
+        X_pred_scaled = self.scale_X(X_pred, self.fitter_name)
+        x_pred = torch.as_tensor(np.ascontiguousarray(X_pred_scaled), dtype=torch.float64)
+
+        self.model.eval()
+        self.likelihood.eval()
+        preds = np.empty(x_pred.shape[0], dtype=float)
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            for i in range(0, x_pred.shape[0], self.pred_batch):
+                xb = x_pred[i:i+self.pred_batch]
+                # latent function mean (matches george's gp.predict mean)
+                preds[i:i+self.pred_batch] = self.model(xb).mean.cpu().numpy()
+        return self.unscale_y(preds)
 
 
 class FitterLinear(Fitter):
