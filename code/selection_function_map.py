@@ -57,7 +57,7 @@ def main():
     tag_cat = ''
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fn_parentcat = None
-    fitter_name = 'GP'
+    fitter_name = 'george'
 
     map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
     NSIDE = 64
@@ -72,7 +72,7 @@ def main():
 
     if not fit_mean:
         tag_sel += '_nofitmean'
-    if fitter_name != 'GP':
+    if fitter_name != 'george':
         tag_sel += f'_{fitter_name}'
     fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
 
@@ -88,7 +88,7 @@ def main():
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, 
         map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise'], 
-        fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
+        fitter_name='sgpr', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson', 
         pixels_to_fit_mode='nonzero', fn_parentcat=None, 
         inputs_are_maps=False, tiny_test=True,
@@ -200,8 +200,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
         print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
         fitter_dict = {'linear': FitterLinear,
-                    'GP': FitterGP,
-                    'gpytorch_sgpr': FitterGPyTorchSGPR}
+                    'george': FitterGeorge,
+                    'sgpr': FitterGPyTorchSGPR}
         fitter_class = fitter_dict[fitter_name]
         fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
                         fit_mean=fit_mean, log_init_guesses=log_init_guesses,
@@ -474,7 +474,7 @@ class Fitter():
 #             self.monopole, self.dipole_x, self.dipole_y, self.dipole_z = v
 
 
-class FitterGP(Fitter):
+class FitterGeorge(Fitter):
     def __init__(self, *args, fit_mean=False, log_init_guesses=None, **kwargs):
         super().__init__(*args, **kwargs)
         print("fit_mean =", fit_mean)
@@ -561,13 +561,13 @@ class FitterGP(Fitter):
 class FitterGPyTorchSGPR(Fitter):
     """Sparse (inducing-point) GP regression via GPyTorch.
 
-    Drop-in alternative to FitterGP that scales to ~all NSIDE=64 pixels: cost is
+    Drop-in alternative to FitterGeorge that scales to ~all NSIDE=64 pixels: cost is
     O(N * M^2) time and O(N * M) memory for M inducing points, vs the exact GP's
     O(N^3) / O(N^2). Runs CPU multi-threaded (set OMP_NUM_THREADS / torch threads).
     """
 
     def __init__(self, *args, fit_mean=False, log_init_guesses=None,
-                 n_inducing=1024, n_iters=300, lr=0.05, n_threads=None,
+                 n_inducing=512, n_iters=300, lr=0.05, n_threads=None,
                  pred_batch=8192, verbose=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.fit_mean = fit_mean
