@@ -51,7 +51,11 @@ def parse_args():
 
 
 def main():
-    run_single()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == 'uniform_pool':
+        run_uniform_pool(overwrite='--overwrite' in sys.argv)
+    else:
+        run_single()
     #run_loop()
 
 def run_single():
@@ -78,6 +82,21 @@ def run_single():
 
     run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_gaia,
         fac_rand=fac_rand, overwrite=overwrite)
+
+
+def run_uniform_pool(G_max=20.5, fac_rand=10, tag_catalog_ref='',
+                     NSIDE_map=64, overwrite=False):
+    """Uniform-sky random pool (sel func = 1). Size = fac_rand * N(catalog_ref).
+
+    Subsample this file per z-slice to fac_rand * N_data for each analysis.
+    Default reference: full quaia_G{G_max}.fits (not a z-cut catalog).
+    """
+    fn_catalog_ref = f'../data/quaia_G{G_max}{tag_catalog_ref}.fits'
+    fn_selfunc = f'../data/maps/selection_function_NSIDE{NSIDE_map}_ones.fits'
+    fn_rand = f'../data/randoms/random_G{G_max}_{fac_rand}x_uniform.fits'
+    run(fn_selfunc, NSIDE_map, fn_rand, fn_catalog=fn_catalog_ref,
+        fac_rand=fac_rand, overwrite=overwrite)
+    return fn_rand
 
 
 def run_loop():
