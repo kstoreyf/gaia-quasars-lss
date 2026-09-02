@@ -1,0 +1,26 @@
+# Minimal env for mock_photoz_selfunc_checks notebook (+ code/correlations imports)
+#
+# On NERSC, $HOME quota is often too small for conda envs — install on $PSCRATCH:
+#   module load conda/Miniforge3-25.11.0-1
+#   mkdir -p $PSCRATCH/conda_envs
+#   conda env create -f environment-gaiaenv.yml --prefix $PSCRATCH/conda_envs/gaiaenv
+#   conda activate $PSCRATCH/conda_envs/gaiaenv
+#   python -m ipykernel install --user --name gaiaenv --display-name "Python (gaiaenv)"
+#
+# Installed location (this machine):
+#   /pscratch/sd/k/kstoreyf/conda_envs/gaiaenv
+name: gaiaenv
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - matplotlib
+  - pillow
+  - pandas
+  - astropy
+  - healpy
+  - corrfunc>=2.5
+  - ipykernel
+  - pip
