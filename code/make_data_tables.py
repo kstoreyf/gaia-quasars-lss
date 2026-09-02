@@ -29,18 +29,18 @@ make_data_tables.py
 """
 
 def main():
-    overwrite = True
+    overwrite = False
 
     ### Make main datasets
-    gaia_candidates_plus_info(overwrite=overwrite)
-    gaia_candidates_superset(overwrite=overwrite)
+    #gaia_candidates_plus_info(overwrite=overwrite)
+    #gaia_candidates_superset(overwrite=overwrite)
     #sdss_slim(overwrite=overwrite)
     #eboss_slim(overwrite=overwrite)
     #gaia_purer_sourceids(overwrite=overwrite)
 
     ### Make quasar tables
     #quasars_sdss_xgaia_good(overwrite=overwrite)
-    #quasars_sdss_xgaiaall_good(overwrite=overwrite)
+    quasars_sdss_xgaiaall_good(overwrite=overwrite)
     #quasars_eboss_xgaia_good(overwrite=overwrite)
     #quasars_eboss_xgaiaall_good(overwrite=overwrite)
 
