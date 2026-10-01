@@ -1,10 +1,12 @@
 # my dirs
 data/
+data
 data_old/
 plots/
 logs/
 old/
 slurm_jobs/
+#data w/o slash bc symlink is treated as file, not dir
 
 # jupyter
 #**/*.ipynb_checkpoints/
