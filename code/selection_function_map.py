@@ -9,7 +9,6 @@ import healpy as hp
 import george
 
 import utils
-import masks
 import maps
 
 """
@@ -87,7 +86,7 @@ def main():
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, 
-        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise'], 
+        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise', 'zodi1.25', 'zodi3.4', 'zodi4.6'], 
         fitter_name='sgpr', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson', 
         pixels_to_fit_mode='nonzero', fn_parentcat=None, 
@@ -111,7 +110,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
     
     if 'quaia' in fn_gaia:
         if map_names is None:
-            map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
+            map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise', \
+                        'zodi1.25', 'zodi3.4', 'zodi4.6']
         log_init_guesses = {'dust': -0.5,
                         'stars': 1.5,
                         'm10': -1,
@@ -125,9 +125,9 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
                         }
     elif 'catwise' in fn_gaia:
         if map_names is None:
-            map_names = ['dust', 'unwise', 'unwisescan']
+            map_names = ['dust', 'unwise', 'unwisescan', 'zodi3.4', 'zodi4.6']
         log_init_guesses = {'dust': -5.0,
-                        'unwise': -3.0,
+                        'unwise': -3.0,    
                         'unwisescan': -3.0,
                         'mcsunwise': 10.0,
                         'zodi3.4': 10.0,
@@ -321,9 +321,9 @@ def load_maps(NSIDE, map_names):
                     'unwise': {},
                     'unwisescan': {},
                     'mcsunwise': {},
-                    'zodi1.25': {'wavelength_str':'1.25'},
-                    'zodi3.4': {'wavelength_str':'3.40'},
-                    'zodi4.6': {'wavelength_str':'4.60'},
+                    'zodi1.25': {},
+                    'zodi3.4': {},
+                    'zodi4.6': {},
                     }
 
     for map_name in map_names:
