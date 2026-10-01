@@ -267,21 +267,16 @@ def get_dust_map(NSIDE=None, R=3.1, map_name='csfd', fn_map=None):
 
 ## zodi maps
 
-def get_zodi_map(NSIDE=None, fn_map=None, wavelength_str='1.25'):
+def get_zodi_map(NSIDE=None, fn_map=None):
     if fn_map is not None and os.path.exists(fn_map):
         print(f"Zodi map already exists, loading from {fn_map}")
         return np.load(fn_map)
-    assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
-    print(f"Generating new star map ({fn_map})")
-    fn_zodi = f'/scratch/aew492/quasars/maps/zodi/zodimap_90degfromSun_oneyear_{wavelength_str}um.fits'
-    map_zodi = hp.read_map(fn_zodi)
-    #hdul = fits.open(fn_zodi)
-    #map_zodi = hdul[0].data
-    if fn_map is not None:
-        np.save(fn_map, map_zodi)
-        print(f"Saved zodi {wavelength_str}um map to {fn_map}")
-    return map_zodi
-
+    # orig filenames from abby, just renamed:
+    # zodimap_45-135degfromSun_oneyear_1.25um_celestial.npy -> map_zodi1.25_NSIDE64.npy
+    # zodimap_88-92degfromSun_oneyear_3.4um_celestial.npy -> map_zodi3.4_NSIDE64.npy
+    # zodimap_88-92degfromSun_oneyear_4.6um_celestial.npy -> map_zodi4.6_NSIDE64.npy
+    assert NSIDE is not None, f"{fn_map} doesn't exist; ask Abby Williams who made it!"
+ 
 
 if __name__=='__main__':
     main()

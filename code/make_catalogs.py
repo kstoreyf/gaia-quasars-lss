@@ -11,13 +11,13 @@ def main():
     overwrite = False
 
     ### Make catalogs with G-cut and redshifts
-    # tag_qspec = ''
-    # #tag_cat = '_mags-0.05'
-    # tag_cat = ''
-    # G_maxs = [20.0, 20.5, 20.6]
-    # #G_maxs = [20.6]
-    # for G_max in G_maxs:
-    #     merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
+    tag_qspec = ''
+    #tag_cat = '_mags-0.05'
+    tag_cat = ''
+    G_maxs = [20.0, 20.5, 20.6]
+    #G_maxs = [20.6]
+    for G_max in G_maxs:
+        merge_gaia_spzs_and_cutGmax(G_max=G_max, tag_qspec=tag_qspec, tag_cat=tag_cat, overwrite=overwrite)
 
     # ### Make public-facing catalog
     #tag_qspec = ''
@@ -50,9 +50,9 @@ def main():
     #make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
     ### For Paul quaia-desi comparison
-    G_max = 20.5
-    z_bins = [0.8,2.1] #desi qso range
-    make_redshift_split_catalogs(G_max, z_bins=z_bins)
+    # G_max = 20.5
+    # z_bins = [0.8,2.1] #desi qso range
+    # make_redshift_split_catalogs(G_max, z_bins=z_bins)
 
     #crossmatch_quaia_sdss_dr16q_prop()
 

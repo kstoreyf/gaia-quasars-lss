@@ -9,7 +9,6 @@ import healpy as hp
 import george
 
 import utils
-import masks
 import maps
 
 """
@@ -57,7 +56,7 @@ def main():
     tag_cat = ''
     fn_gaia = f'../data/quaia_G{G_max}{tag_cat}.fits' 
     fn_parentcat = None
-    fitter_name = 'GP'
+    fitter_name = 'george'
 
     map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
     NSIDE = 64
@@ -72,7 +71,7 @@ def main():
 
     if not fit_mean:
         tag_sel += '_nofitmean'
-    if fitter_name != 'GP':
+    if fitter_name != 'george':
         tag_sel += f'_{fitter_name}'
     fn_selfunc = f"../data/maps/selection_function_NSIDE{NSIDE}_G{G_max}{tag_cat}{tag_sel}.fits"
 
@@ -87,8 +86,8 @@ def main():
 
 
 def run(fn_gaia, fn_selfunc, NSIDE=64, 
-        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise'], 
-        fitter_name='GP', x_scale_name='zeromean', y_scale_name='log',
+        map_names=['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise', 'zodi1.25', 'zodi3.4', 'zodi4.6'], 
+        fitter_name='sgpr', x_scale_name='zeromean', y_scale_name='log',
         y_err_mode='poisson', 
         pixels_to_fit_mode='nonzero', fn_parentcat=None, 
         inputs_are_maps=False, tiny_test=True,
@@ -111,7 +110,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
     
     if 'quaia' in fn_gaia:
         if map_names is None:
-            map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise']
+            map_names = ['dust', 'stars', 'm10', 'mcs', 'unwise', 'unwisescan', 'mcsunwise', \
+                        'zodi1.25', 'zodi3.4', 'zodi4.6']
         log_init_guesses = {'dust': -0.5,
                         'stars': 1.5,
                         'm10': -1,
@@ -125,9 +125,9 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
                         }
     elif 'catwise' in fn_gaia:
         if map_names is None:
-            map_names = ['dust', 'unwise', 'unwisescan']
+            map_names = ['dust', 'unwise', 'unwisescan', 'zodi3.4', 'zodi4.6']
         log_init_guesses = {'dust': -5.0,
-                        'unwise': -3.0,
+                        'unwise': -3.0,    
                         'unwisescan': -3.0,
                         'mcsunwise': 10.0,
                         'zodi3.4': 10.0,
@@ -200,8 +200,8 @@ def run(fn_gaia, fn_selfunc, NSIDE=64,
         print("X_train:", X_train.shape, "y_train:", y_train.shape, flush=True)
         print("y_train min:", np.min(y_train), "y_train:", np.max(y_train), flush=True)
         fitter_dict = {'linear': FitterLinear,
-                    'GP': FitterGP,
-                    'gpytorch_sgpr': FitterGPyTorchSGPR}
+                    'george': FitterGeorge,
+                    'sgpr': FitterGPyTorchSGPR}
         fitter_class = fitter_dict[fitter_name]
         fitter = fitter_class(X_train, y_train, y_err_train, fitter_name,
                         fit_mean=fit_mean, log_init_guesses=log_init_guesses,
@@ -321,9 +321,9 @@ def load_maps(NSIDE, map_names):
                     'unwise': {},
                     'unwisescan': {},
                     'mcsunwise': {},
-                    'zodi1.25': {'wavelength_str':'1.25'},
-                    'zodi3.4': {'wavelength_str':'3.40'},
-                    'zodi4.6': {'wavelength_str':'4.60'},
+                    'zodi1.25': {},
+                    'zodi3.4': {},
+                    'zodi4.6': {},
                     }
 
     for map_name in map_names:
@@ -474,7 +474,7 @@ class Fitter():
 #             self.monopole, self.dipole_x, self.dipole_y, self.dipole_z = v
 
 
-class FitterGP(Fitter):
+class FitterGeorge(Fitter):
     def __init__(self, *args, fit_mean=False, log_init_guesses=None, **kwargs):
         super().__init__(*args, **kwargs)
         print("fit_mean =", fit_mean)
@@ -561,13 +561,13 @@ class FitterGP(Fitter):
 class FitterGPyTorchSGPR(Fitter):
     """Sparse (inducing-point) GP regression via GPyTorch.
 
-    Drop-in alternative to FitterGP that scales to ~all NSIDE=64 pixels: cost is
+    Drop-in alternative to FitterGeorge that scales to ~all NSIDE=64 pixels: cost is
     O(N * M^2) time and O(N * M) memory for M inducing points, vs the exact GP's
     O(N^3) / O(N^2). Runs CPU multi-threaded (set OMP_NUM_THREADS / torch threads).
     """
 
     def __init__(self, *args, fit_mean=False, log_init_guesses=None,
-                 n_inducing=1024, n_iters=300, lr=0.05, n_threads=None,
+                 n_inducing=512, n_iters=300, lr=0.05, n_threads=None,
                  pred_batch=8192, verbose=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.fit_mean = fit_mean
