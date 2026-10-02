@@ -327,7 +327,7 @@ def load_maps(NSIDE, map_names):
                     }
 
     for map_name in map_names:
-        fn_map = f'../data/maps/map_{map_name}_NSIDE{NSIDE}.npy'
+        fn_map = maps.template_map_fn(map_name, NSIDE)
         maps_forsel.append( map_functions[map_name](NSIDE=NSIDE, fn_map=fn_map, **map_kwargs[map_name]) )
     return maps_forsel
 

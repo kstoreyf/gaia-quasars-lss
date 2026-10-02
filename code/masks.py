@@ -90,7 +90,7 @@ def subsample_mask_indices(ra, dec, mask):
 def get_qso_mask(NSIDE, mask_names_gaia, b_max=None, Av_max=None, R=3.1):
     print("Getting QSO mask")
 
-    fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE}.npy'
+    fn_dustmap = maps.template_map_fn('dust', NSIDE)
     # dict points to tuple with masks and extra args
     mask_gaia_dict = {'plane': (galactic_plane_mask, [b_max]),
                   'mcs': (magellanic_clouds_mask, []),

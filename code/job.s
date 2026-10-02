@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=sel_func_G20.5_sgpr_n4
+#SBATCH --job-name=sel_func_G20.0_pluszodisnew
 #SBATCH --output=logs/%x.out
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=4 #8 too slow to run (AssocGrpNodeLimit)
@@ -13,8 +13,8 @@
 
 source /sdf/group/kipac/sw/conda/etc/profile.d/conda.sh
 conda activate gaiaenv
-python selection_function_map.py ../data/quaia_G20.5.fits ../data/maps/selection_function_NSIDE64_G20.5_sgpr.fits;
-
+#python selection_function_map.py ../data/quaia_G20.5.fits ../data/maps/selection_function_NSIDE64_G20.5_sgpr.fits;
+python selection_function_map.py ../data/quaia_G20.0.fits ../data/maps/selection_function_NSIDE64_G20.0_pluszodisnew.fits
 ## greene
 # CPU/RAM maxes on greene are 48/180GB, 48/369GB
 # selection function: need mem 175GB. set cpus-per-task=48

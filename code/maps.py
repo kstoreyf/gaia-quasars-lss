@@ -11,9 +11,16 @@ from astropy.io import fits
 import utils
 
 
+TEMPLATE_MAP_DIR = '../data/selection_function_template_maps'
+
+
+def template_map_fn(map_name, NSIDE):
+    return f'{TEMPLATE_MAP_DIR}/map_{map_name}_NSIDE{NSIDE}.npy'
+
+
 def main():
     NSIDE = 256
-    fn_starmap = f'../data/maps/map_stars_NSIDE{NSIDE}.npy'
+    fn_starmap = template_map_fn('stars', NSIDE)
     map_stars = get_star_map(NSIDE=NSIDE, fn_map=fn_starmap)
 
 
@@ -109,7 +116,7 @@ def get_mcs_map(NSIDE, fn_map=None,
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     
     if fn_starmap is None:
-        fn_starmap = f'../data/maps/map_stars_NSIDE{NSIDE}.npy'
+        fn_starmap = template_map_fn('stars', NSIDE)
 
     from astropy.coordinates import Galactic, ICRS
 
@@ -159,7 +166,7 @@ def get_mcsunwise_map(NSIDE, fn_map=None,
     assert NSIDE is not None, f"{fn_map} doesn't exist; must pass NSIDE to generate!"
     
     if fn_unwisemap is None:
-        fn_unwisemap = f'../data/maps/map_unwise_NSIDE{NSIDE}.npy'
+        fn_unwisemap = template_map_fn('unwise', NSIDE)
 
     from astropy.coordinates import Galactic, ICRS
 
@@ -268,15 +275,14 @@ def get_dust_map(NSIDE=None, R=3.1, map_name='csfd', fn_map=None):
 ## zodi maps
 
 def get_zodi_map(NSIDE=None, fn_map=None):
-    if fn_map is not None and os.path.exists(fn_map):
-        print(f"Zodi map already exists, loading from {fn_map}")
-        return np.load(fn_map)
     # orig filenames from abby, just renamed:
     # zodimap_45-135degfromSun_oneyear_1.25um_celestial.npy -> map_zodi1.25_NSIDE64.npy
     # zodimap_88-92degfromSun_oneyear_3.4um_celestial.npy -> map_zodi3.4_NSIDE64.npy
     # zodimap_88-92degfromSun_oneyear_4.6um_celestial.npy -> map_zodi4.6_NSIDE64.npy
-    assert NSIDE is not None, f"{fn_map} doesn't exist; ask Abby Williams who made it!"
- 
+    if fn_map is not None and os.path.exists(fn_map):
+        print(f"Zodi map already exists, loading from {fn_map}")
+        return np.load(fn_map)
+    assert False, f"{fn_map} doesn't exist; zodi maps are precomputed (NSIDE={NSIDE})" 
 
 if __name__=='__main__':
     main()

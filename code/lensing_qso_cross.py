@@ -194,7 +194,7 @@ def get_mask_indices_keep(NSIDE, ra, dec, mask_names_gaia):
     b_max = 10
     Av_max = 0.2
     R = 3.1
-    fn_dustmap = f'../data/maps/map_dust_NSIDE{NSIDE}.npy'
+    fn_dustmap = maps.template_map_fn('dust', NSIDE)
     # dict points to tuple with masks and extra args
     mask_gaia_dict = {'plane': (masks.galactic_plane_mask, [b_max]),
                   'mcs': (masks.magellanic_clouds_mask, []),
